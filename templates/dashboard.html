@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vulnerability Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div><p class="eyebrow">SECURITY OPERATIONS / LOCAL REPORT</p><h1>Vulnerability Dashboard</h1><p class="subtitle">Risk posture, remediation velocity, and SLA exposure in one view.</p></div>
+      <div id="statusChip" class="status-chip"><span id="statusDot" class="status-dot"></span><span id="reportStatus">Awaiting report</span></div>
+    </header>
+    {% if load_error %}<section class="empty-state"><strong>Report not loaded</strong><span>{{ load_error }}</span><small>Place a CSV at <code>data/vulnerability_report.csv</code> and refresh.</small></section>{% endif %}
+    <section class="toolbar" aria-label="Dashboard filters">
+      <div class="toolbar-row toolbar-filters-row">
+        <div id="filters" class="filters"></div>
+      </div>
+      <div class="toolbar-row toolbar-actions-row">
+        <div class="toolbar-actions" aria-label="Dashboard actions">
+          <div class="toolbar-actions-left">
+            <div class="export-dropdown">
+              <button id="exportReport" class="button button-outline">Export Report ▾</button>
+              <div id="exportMenu" class="export-menu" hidden>
+                <button type="button" class="export-menu-item" data-action="filtered">Dashboard Report</button>
+                <button type="button" class="export-menu-item" data-action="output">Download Output File</button>
+                <button type="button" class="export-menu-item" data-action="raw">Download raw input report</button>
+                <button type="button" class="export-menu-item" data-action="archive">Archive folder</button>
+              </div>
+            </div>
+            <button id="resetFilters" class="button button-reset" type="button">Reset Filter</button>
+          </div>
+          <div class="toolbar-actions-right">
+            <div class="import-group">
+              <div class="import-dropdown">
+                <button id="importReport" class="button button-primary" type="button">Import Report ▾</button>
+                <div id="importMenu" class="import-menu" hidden>
+                  <button type="button" class="import-menu-item" data-action="upload">Import From This PC</button>
+                  <button type="button" class="import-menu-item" data-action="portal">Load From Portal</button>
+                </div>
+              </div>
+              <input id="reportFileInput" type="file" accept=".csv,.xlsx,.xlsm" hidden>
+              <span id="importMessage" class="import-message" role="status" aria-live="polite"></span>
+            </div>
+            <button id="refreshDashboard" class="button button-refresh" type="button">Refresh</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="kpis" class="kpi-grid"></section>
+    <section class="section-heading"><div><p class="eyebrow">01 / EXPOSURE</p><h2>Severity and SLA posture</h2></div><span id="lastUpdated" class="muted"></span></section>
+    <section class="chart-grid chart-grid-main exposure-chart-grid">
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Severity distribution</h3><p>Current report composition</p></div><span class="panel-mark">RISK</span></div><div class="donut-wrap"><canvas id="severityChart"></canvas><div id="donutTotal" class="donut-total"></div></div><div id="severityLegend" class="legend"></div></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Severity vs status</h3><p>Workflow stage by severity</p></div></div><canvas id="statusChart" class="wide-canvas"></canvas></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>SLA health</h3><p>Independent severity rule validation</p></div></div><canvas id="slaChart" class="wide-canvas"></canvas></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Vulnerability aging</h3><p>Age from first detected date</p></div></div><canvas id="agingChart" class="wide-canvas"></canvas></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Environment distribution</h3><p>Findings by environment</p></div><span class="panel-mark">ENV</span></div><div class="donut-wrap"><canvas id="envDistributionChart"></canvas><div id="envDonutTotal" class="donut-total"></div></div><div id="envDistributionLegend" class="legend"></div></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Remediation action distribution</h3><p>Findings by remediation stage</p></div><span class="panel-mark">REMEDIATION</span></div><div class="donut-wrap"><canvas id="remediationChart"></canvas><div id="remediationDonutTotal" class="donut-total"></div></div><div id="remediationLegend" class="legend"></div></article>
+    </section>
+    <section class="section-heading"><div><p class="eyebrow">02 / APPLICATION SCORE</p><h2>Application Vulnerability Score (AVS)</h2></div></section>
+    <section id="avsKpis" class="kpi-grid"></section>
+    <section class="chart-grid avs-chart-grid">
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>AVS distribution</h3><p>Applications by AVS level</p></div><span class="panel-mark">AVS</span></div><div class="donut-wrap"><canvas id="avsDistributionChart"></canvas><div id="avsDonutTotal" class="donut-total"></div></div><div id="avsDistributionLegend" class="legend"></div></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>Top 10 applications by AVS score</h3><p>Highest scoring applications in scope</p></div></div><canvas id="avsTopAppsChart" class="wide-canvas"></canvas></article>
+      <article class="panel chart-panel"><div class="panel-head"><div><h3>AVS score by team</h3><p>Aggregate AVS score per owning team</p></div></div><canvas id="avsTeamChart" class="wide-canvas"></canvas></article>
+    </section>
+    <section class="section-heading"><div><p class="eyebrow">02a / APPLICATION LIST</p><h2>AVS list</h2></div><div class="import-group"><button id="exportAvsList" type="button" class="button button-secondary">Export AVS List</button><span id="avsImportMessage" class="avs-import-message"></span></div><div class="table-tools"><input id="avsSearch" type="search" placeholder="Search application, team..." aria-label="Search AVS list"><select id="avsPageSize" class="table-select" aria-label="Rows per page"><option value="15" selected>15 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><span id="avsCount" class="muted"></span></div></section>
+    <section class="panel matrix-panel"><div class="table-wrap"><table id="avsTable"><thead><tr><th>Application</th><th>Team</th><th>AVS Score</th><th>AVS Level</th><th>Unique Vulnerabilities (&gt;45 Days)</th><th>Asset Type</th><th>Zone</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="avsPreviousPage" class="button button-quiet">Previous</button><span id="avsPageInfo"></span><button id="avsNextPage" class="button button-quiet">Next</button></div></section>
+    <section class="section-heading"><div><p class="eyebrow">03 / HOTSPOTS</p><h2>Where remediation needs attention</h2></div></section>
+    <section class="chart-grid"><article class="panel chart-panel hotspot-panel"><div class="panel-head"><div><h3>Top vulnerable servers</h3><p>By finding count, top ten</p></div></div><canvas id="serverChart" class="wide-canvas"></canvas></article></section>
+    <section class="section-heading"><div><p class="eyebrow">04 / APPLICATION RISK</p><h2>AppSpace risk matrix</h2></div><div class="table-tools"><input id="matrixSearch" type="search" placeholder="Search AppSpace, team..." aria-label="Search AppSpace risk matrix"><select id="matrixPageSize" class="table-select" aria-label="Rows per page"><option value="15" selected>15 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><span id="matrixCount" class="muted"></span></div></section>
+    <section class="panel matrix-panel"><div class="table-wrap"><table id="matrixTable"><thead><tr><th>AppSpace</th><th>Team</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Overdue</th><th>SLA breach</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="matrixPreviousPage" class="button button-quiet">Previous</button><span id="matrixPageInfo"></span><button id="matrixNextPage" class="button button-quiet">Next</button></div></section>
+    <section class="section-heading"><div><p class="eyebrow">05 / CRITICAL QUEUE</p><h2>Critical vulnerabilities</h2></div><div class="table-tools"><input id="criticalSearch" type="search" placeholder="Search server, finding, AppSpace..." aria-label="Search critical vulnerabilities"><select id="criticalPageSize" class="table-select" aria-label="Rows per page"><option value="15" selected>15 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><span id="criticalCount" class="muted"></span></div></section>
+    <section class="panel matrix-panel"><div class="table-wrap"><table id="criticalTable"><thead><tr><th>Server</th><th>Vulnerability</th><th>Environment</th><th>AppSpace</th><th>Age</th><th>SLA due</th><th>State</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="criticalPreviousPage" class="button button-quiet">Previous</button><span id="criticalPageInfo"></span><button id="criticalNextPage" class="button button-quiet">Next</button></div></section>
+    <section class="section-heading"><div><p class="eyebrow">06 / PATTERNS</p><h2>Recurring findings and compliance</h2></div></section>
+    <section class="insight-grid"><article class="panel"><div class="panel-head"><div><h3>Top CVEs</h3><p>Most frequent identifiers</p></div></div><div id="cveList" class="rank-list"></div></article><article class="panel"><div class="panel-head"><div><h3>Top QIDs</h3><p>Most frequent Qualys IDs</p></div></div><div id="qidList" class="rank-list"></div></article><article class="panel compliance-panel"><div class="panel-head"><div><h3>PCI compliance</h3><p>Required vulnerabilities in scope</p></div></div><div id="pciMetric" class="compliance-metric"></div></article></section>
+    <section class="section-heading"><div><p class="eyebrow">07 / FINDINGS</p><h2>Vulnerability register</h2></div><div class="table-tools"><input id="tableSearch" type="search" placeholder="Search server, QID, CVE..." aria-label="Search vulnerabilities"><select id="recordsPageSize" class="table-select" aria-label="Rows per page"><option value="15" selected>15 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><span id="tableCount" class="muted"></span></div></section>
+    <section class="panel table-panel"><div class="table-wrap"><table id="recordsTable"><thead><tr><th>Server</th><th>OS</th><th>Environment</th><th>AppSpace</th><th>QID</th><th>Finding</th><th>Severity</th><th>CVSS</th><th>First detected</th><th>Days open</th><th>SLA due</th><th>Status</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="previousPage" class="button button-quiet">Previous</button><span id="pageInfo"></span><button id="nextPage" class="button button-quiet">Next</button></div></section>
+    <footer>Processed source <span id="sourcePath">output/processed_vulnerabilities.csv</span> <span class="footer-separator">•</span> Rules: Critical 7d / High 30d / Medium 60d / Low 90d</footer>
+  </main>
+  <div id="archiveModal" class="archive-modal" hidden>
+    <div class="archive-modal-panel">
+      <div class="archive-modal-head"><h3>Archive folder</h3><button id="archiveModalClose" class="button button-quiet">Close</button></div>
+      <div class="table-wrap"><table id="archiveTable"><thead><tr><th>File</th><th>Size (KB)</th><th>Modified</th><th></th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+  <div class="assistant-widget">
+    <button id="assistantToggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistantPanel" aria-label="Open dashboard assistant"><span aria-hidden="true">✦</span></button>
+    <section id="assistantPanel" class="assistant-panel" role="dialog" aria-label="Dashboard assistant" hidden>
+      <header class="assistant-head">
+        <div><p class="assistant-eyebrow">AI ASSISTANT</p><h3>Dashboard Assistant</h3></div>
+        <button id="assistantClose" class="assistant-close" type="button" aria-label="Close assistant">✕</button>
+      </header>
+      <div id="assistantSuggestions" class="assistant-suggestions" aria-label="Suggested questions"></div>
+      <div id="assistantMessages" class="assistant-messages" role="log" aria-live="polite"></div>
+      <form class="assistant-input-row" onsubmit="return false;">
+        <input id="assistantInput" type="text" autocomplete="off" placeholder="Ask about the findings in scope..." aria-label="Ask the dashboard assistant">
+        <button id="assistantSend" class="assistant-send" type="button">Send</button>
+      </form>
+    </section>
+  </div>
+  <script>window.DASHBOARD_DATA = {{ dashboard_json|safe }}; window.LOAD_ERROR = {{ load_error|tojson }};</script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script><script src="{{ url_for('static', filename='js/filters.js') }}"></script><script src="{{ url_for('static', filename='js/table-controller.js') }}"></script><script src="{{ url_for('static', filename='js/avs-core.js') }}"></script><script src="{{ url_for('static', filename='js/avs.js') }}"></script><script src="{{ url_for('static', filename='js/assistant-engine.js') }}"></script><script src="{{ url_for('static', filename='js/assistant.js') }}"></script><script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

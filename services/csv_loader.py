@@ -1,0 +1,215 @@
+import csv
+import hashlib
+import re
+import zipfile
+import xml.etree.ElementTree as ET
+from datetime import date, timedelta
+from pathlib import Path
+
+from models.vulnerability import Vulnerability
+from utils.calculation_utils import aging_bucket, calculate_sla, normalize_severity, normalize_status
+from utils.date_utils import parse_bool, parse_date, parse_number
+
+
+STANDARD_COLUMNS = (
+    "ServerName", "OperatingSystem", "Environment", "AssetType", "AppSpaceId", "AppSpaceName",
+    "AppSpaceOwner", "AppSpaceTeam", "FundamentalClassification", "ITORresponsiblePartner", "QID",
+    "VulnerabilityName", "Severity", "AssetRiskScore", "QDS", "PCIRequired", "Type", "Category",
+    "ThreatIntel", "PatchAvailable", "ThirdPartyComponent", "ThirdPartyComponentName", "Detection",
+    "Solution", "CVE", "VendorReference", "ReleaseDate", "FirstDetected", "LastDetected", "Resolved",
+    "ResolutionInDays", "SIABreach", "CoveredInWintelCoreBaseline", "ScheduledDeployment", "LastPatchAttempt",
+    "Status", "PatchAvailableNewMetric", "LeaderName", "CVSS2Temporal", "CVSS3Temporal", "BaselinePublished",
+)
+REQUIRED_COLUMNS = (
+    "ServerName", "OperatingSystem", "Environment", "AppSpaceId", "AppSpaceName", "AppSpaceTeam",
+    "QID", "VulnerabilityName", "Severity", "AssetRiskScore", "PCIRequired", "Category", "CVE",
+    "VendorReference", "FirstDetected", "LastDetected", "Resolved", "SIABreach", "Status",
+)
+PROCESSED_COLUMNS = (
+    "id", "ServerName", "Operating System", "Environment", "AssetType", "AppSpaceName", "AppSpaceId",
+    "AppSpaceOwner", "AppSpaceTeam", "QID", "Vulnerability Name", "Severity", "CVSS Base Score",
+    "AssetRiskScore", "QDS", "CVE", "Vendor", "VendorReference", "Type", "Category", "Type Category",
+    "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
+    "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "SLA Breach", "Overdue",
+    "Aging Bucket", "Detection", "Solution", "PatchAvailable", "ThreatIntel", "ReleaseDate",
+    "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
+    "AVSScore", "AVSLevel", "AVSUniqueVulnCount", "AVS Asset Type", "AVS Zone",
+)
+DATE_COLUMNS = {"ReleaseDate", "FirstDetected", "LastDetected", "Resolved", "LastPatchAttempt", "BaselinePublished"}
+SPREADSHEET_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+
+
+def validate_required_columns(fieldnames: list[str] | None) -> None:
+    if not fieldnames:
+        raise ValueError("CSV has no header row")
+    missing = [column for column in REQUIRED_COLUMNS if column not in fieldnames]
+    if missing:
+        raise ValueError(f"CSV is missing required standard columns: {', '.join(missing)}")
+
+
+def _value(row: dict[str, str], column: str) -> str:
+    return (row.get(column) or "").strip()
+
+
+def _is_workbook(path: Path) -> bool:
+    return path.read_bytes()[:4] == b"PK\x03\x04"
+
+
+def _column_index(reference: str) -> int:
+    letters = re.sub(r"[^A-Za-z]", "", reference)
+    total = 0
+    for letter in letters:
+        total = total * 26 + ord(letter.upper()) - 64
+    return total - 1
+
+
+def _excel_date(value: str) -> str:
+    try:
+        number = float(value)
+    except ValueError:
+        return value
+    return (date(1899, 12, 30) + timedelta(days=int(number))).isoformat()
+
+
+def _shared_strings(zip_file: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in zip_file.namelist():
+        return []
+    root = ET.fromstring(zip_file.read("xl/sharedStrings.xml"))
+    return ["".join(node.text or "" for node in item.findall(".//a:t", SPREADSHEET_NS)) for item in root.findall("a:si", SPREADSHEET_NS)]
+
+
+def _cell_text(cell: ET.Element, shared: list[str]) -> str:
+    cell_type = cell.get("t")
+    if cell_type == "inlineStr":
+        return "".join(node.text or "" for node in cell.findall(".//a:t", SPREADSHEET_NS)).strip()
+    value = cell.find("a:v", SPREADSHEET_NS)
+    text = "" if value is None else value.text or ""
+    if cell_type == "s" and text:
+        return shared[int(text)].strip()
+    return text.strip()
+
+
+def _workbook_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    with zipfile.ZipFile(path) as zip_file:
+        shared = _shared_strings(zip_file)
+        worksheet_name = "xl/worksheets/sheet1.xml"
+        if worksheet_name not in zip_file.namelist():
+            raise ValueError(f"{path.name} does not contain the expected first worksheet")
+        sheet = ET.fromstring(zip_file.read(worksheet_name))
+        rows = sheet.findall(".//a:sheetData/a:row", SPREADSHEET_NS)
+        if not rows:
+            raise ValueError("CSV has no header row")
+        header_cells = {_column_index(cell.get("r", "")): _cell_text(cell, shared) for cell in rows[0].findall("a:c", SPREADSHEET_NS)}
+        fieldnames = [header_cells.get(index, "") for index in range(max(header_cells.keys(), default=-1) + 1)]
+        validate_required_columns(fieldnames)
+        output = []
+        for row in rows[1:]:
+            values = {_column_index(cell.get("r", "")): _cell_text(cell, shared) for cell in row.findall("a:c", SPREADSHEET_NS)}
+            item = {}
+            for index, column in enumerate(fieldnames):
+                if not column:
+                    continue
+                value = values.get(index, "")
+                item[column] = _excel_date(value) if column in DATE_COLUMNS and value.isdigit() else value
+            if any(item.values()):
+                output.append(item)
+        return fieldnames, output
+
+
+def _csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        validate_required_columns(reader.fieldnames)
+        return list(reader.fieldnames or []), list(reader)
+
+
+def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability], dict]:
+    today = today or date.today()
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV report not found: {csv_path}")
+    fieldnames, rows = _workbook_rows(csv_path) if _is_workbook(csv_path) else _csv_rows(csv_path)
+    records: list[Vulnerability] = []
+    seen: set[str] = set()
+    duplicate_count = 0
+    invalid_date_count = 0
+    for row_number, row in enumerate(rows, start=2):
+        cleaned = {str(key): (value or "").strip() for key, value in row.items() if key}
+        fingerprint = hashlib.sha1("\x1f".join(cleaned.values()).encode("utf-8")).hexdigest()
+        if fingerprint in seen:
+            duplicate_count += 1
+            continue
+        seen.add(fingerprint)
+        first = parse_date(_value(cleaned, "FirstDetected"))
+        last = parse_date(_value(cleaned, "LastDetected"))
+        resolution = parse_date(_value(cleaned, "Resolved"))
+        supplied_first = _value(cleaned, "FirstDetected")
+        supplied_last = _value(cleaned, "LastDetected")
+        warnings = []
+        invalid_date_count += int(bool(supplied_first and not first)) + int(bool(supplied_last and not last))
+        if supplied_first and not first:
+            warnings.append(f"Invalid first detected date on row {row_number}")
+        vulnerability = Vulnerability(
+            raw=cleaned,
+            record_id=f"row-{row_number}",
+            server_name=_value(cleaned, "ServerName") or "Unknown",
+            operating_system=_value(cleaned, "OperatingSystem") or "Unknown",
+            environment=_value(cleaned, "Environment") or "Unknown",
+            app_space_name=_value(cleaned, "AppSpaceName") or "Unknown",
+            app_space_id=_value(cleaned, "AppSpaceId") or "Unknown",
+            app_space_owner=_value(cleaned, "AppSpaceOwner") or "Unknown",
+            app_space_team=_value(cleaned, "AppSpaceTeam") or "Unknown",
+            qid=_value(cleaned, "QID") or "Unknown",
+            vulnerability_name=_value(cleaned, "VulnerabilityName") or "Unknown",
+            severity=normalize_severity(_value(cleaned, "Severity")),
+            cvss_base_score=parse_number(_value(cleaned, "CVSS3Temporal")) or parse_number(_value(cleaned, "CVSS2Temporal")),
+            asset_risk_score=parse_number(_value(cleaned, "AssetRiskScore")),
+            cve=_value(cleaned, "CVE") or "N/A",
+            vendor=_value(cleaned, "VendorReference") or "Unknown",
+            type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
+            pci_required=bool(parse_bool(_value(cleaned, "PCIRequired"))),
+            status=normalize_status(_value(cleaned, "Status")),
+            first_detected=first,
+            last_detected=last,
+            resolution_date=resolution,
+            source_sla_breach=parse_bool(_value(cleaned, "SIABreach")),
+            warnings=warnings,
+        )
+        vulnerability.age_days = max((today - first).days, 0) if first else 0
+        vulnerability.aging_bucket = aging_bucket(vulnerability.age_days) if first else "Unknown"
+        vulnerability.__dict__.update(calculate_sla(first, vulnerability.severity, vulnerability.status, resolution, today))
+        records.append(vulnerability)
+    return records, {"duplicates_skipped": duplicate_count, "invalid_dates": invalid_date_count, "columns": fieldnames, "source_format": "workbook" if _is_workbook(csv_path) else "csv"}
+
+
+def processed_row(record: Vulnerability) -> dict[str, object]:
+    row = record.to_dict()
+    raw = record.raw
+    row.update({
+        "AssetType": _value(raw, "AssetType"),
+        "AppSpaceOwner": _value(raw, "AppSpaceOwner"),
+        "QDS": _value(raw, "QDS"),
+        "Vendor": record.vendor,
+        "VendorReference": _value(raw, "VendorReference"),
+        "Type": _value(raw, "Type"),
+        "Category": _value(raw, "Category"),
+        "Detection": _value(raw, "Detection"),
+        "Solution": _value(raw, "Solution"),
+        "PatchAvailable": _value(raw, "PatchAvailable"),
+        "ThreatIntel": _value(raw, "ThreatIntel"),
+        "ReleaseDate": _value(raw, "ReleaseDate"),
+        "ResolutionInDays": _value(raw, "ResolutionInDays"),
+        "ScheduledDeployment": _value(raw, "ScheduledDeployment"),
+        "LastPatchAttempt": _value(raw, "LastPatchAttempt"),
+        "LeaderName": _value(raw, "LeaderName"),
+        "BaselinePublished": _value(raw, "BaselinePublished"),
+        "Vulnerability Age": record.age_days,
+    })
+    return {column: row.get(column, "") for column in PROCESSED_COLUMNS}
+
+
+def write_processed_csv(records: list[Vulnerability], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=PROCESSED_COLUMNS)
+        writer.writeheader()
+        writer.writerows(processed_row(record) for record in records)
