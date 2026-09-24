@@ -9,7 +9,7 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div><p class="eyebrow">SECURITY OPERATIONS / LOCAL REPORT</p><h1>Vulnerability Dashboard</h1><p class="subtitle">Risk posture, remediation velocity, and SLA exposure in one view.</p></div>
+      <div><p class="eyebrow">SECURITY OPERATIONS / LOCAL REPORT</p><h1>Vulnerability Dashboard Report</h1><p class="subtitle">Risk posture, remediation velocity, and SLA exposure in one view.</p></div>
       <div id="statusChip" class="status-chip"><span id="statusDot" class="status-dot"></span><span id="reportStatus">Awaiting report</span></div>
     </header>
     {% if load_error %}<section class="empty-state"><strong>Report not loaded</strong><span>{{ load_error }}</span><small>Place a CSV at <code>data/vulnerability_report.csv</code> and refresh.</small></section>{% endif %}
