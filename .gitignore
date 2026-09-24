@@ -26,8 +26,7 @@ dist/
 # Data, output and archive artifacts
 data/
 output/
-archive/*.log
-archive/*.tmp
+archive/
 
 # Logs
 *.log

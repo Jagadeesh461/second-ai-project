@@ -4,6 +4,65 @@ A local, CSV-driven vulnerability management dashboard built with Python, Flask,
 
 The application has no database and does not connect to external systems. Place the latest standard vulnerability CSV in `data/`, then use the dashboard or Import Report button to generate the processed dataset and cached statistics used by the UI.
 
+## Quick Setup for a New Clone
+
+Use these steps after cloning the repository. The `data/` and `output/` folders are ignored by Git, so each developer must create them locally.
+
+### Prerequisites
+
+- Python 3.10 or later
+- `pip`
+- A standard vulnerability report CSV with the required columns listed in this README
+
+### Setup and Run
+
+#### Copy-Paste Setup Prompt
+
+If you want an AI assistant or teammate to set up the project, use this prompt:
+
+```text
+Set up this Python Flask vulnerability dashboard so it is ready to run locally. Create a virtual environment, install Flask and all other dependencies from requirements.txt .
+
+```
+
+#### Manual Setup Commands
+
+From the cloned project directory:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+The `python -m pip install -r requirements.txt` command installs Flask, pandas, and the test dependency `dukpy`.
+
+Copy the vulnerability report CSV into `data/`, preferably as:
+
+```text
+data/vulnerability_report.csv
+```
+
+Then start the dashboard:
+
+```powershell
+python app.py
+```
+
+Open:
+
+```text
+http://127.0.0.1:5000/
+```
+
+If PowerShell blocks virtual environment activation, run this once in the same terminal and activate again:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
 ## Project Flow
 
 ```text
@@ -113,9 +172,10 @@ The Flask application entry point.
 
 ### `requirements.txt`
 
-Lists the Python dependency:
+Lists the Python dependencies:
 
 - `Flask` for the local web server and routes.
+- `pandas` for CSV/data processing.
 - `dukpy` for unit testing the browser-side JavaScript (test-only).
 
 ### `test.py`
