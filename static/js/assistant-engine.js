@@ -33,14 +33,14 @@ const ASSISTANT_FILTER_FIELD_CUES = {
   app_space_team: ['team'],
   app_space_name: ['appspace', 'app space', 'application', 'app'],
   environment: ['environment', 'env'],
-  vendor: ['vendor'],
+  dependant_team: ['dependant team', 'dependent team', 'dependant', 'dependent'],
   operating_system: ['operating system', 'os'],
   type_category: ['category'],
 };
 
 // Fields whose values are free text and must be recognised from the actual
 // dataset rather than a fixed vocabulary.
-const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'vendor', 'operating_system', 'type_category', 'environment'];
+const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'dependant_team', 'operating_system', 'type_category', 'environment'];
 
 function assistantFieldOptions(records, key) {
   // Reuses the dashboard's own option-listing helper (filters.js) so every
@@ -53,8 +53,8 @@ function assistantFindCue(lowerQuery, cues) {
   return (cues || []).some(cue => lowerQuery.includes(cue));
 }
 
-// Recognises free-text filter values (AppSpace, Owner, Team, Vendor, OS,
-// Category, Environment) by checking whether any real value already present
+// Recognises free-text filter values (AppSpace, Owner, Team, Dependant Team,
+// OS, Category, Environment) by checking whether any real value already present
 // in the dataset appears verbatim in the question.
 function assistantExtractFieldFilters(query, records) {
   const lowerQuery = query.toLowerCase();
@@ -128,7 +128,7 @@ function assistantExtractFilters(query, records) {
 // Extra response-type intents beyond the seven suggested questions
 // (ASSISTANT_QUESTIONS stays limited to those for the suggestion chips).
 //
-// `fieldFilters` (the free-text AppSpace/Owner/Team/Vendor/OS/Category/
+// `fieldFilters` (the free-text AppSpace/Owner/Team/Dependant Team/OS/Category/
 // Environment values already recognised for this question) are stripped out
 // before falling back to the keyword-based question matcher, so a field name
 // used purely as a filter cue (e.g. the word "AppSpace" in "AppSpace owner
@@ -570,7 +570,7 @@ const ASSISTANT_INTENT_OWNED_FIELDS = {
 // produces a structured answer.
 //
 // Any filter criteria named in the question (AppSpace, Owner, Team,
-// Environment, Severity, Status, Vendor, OS, Category, PCI, SLA Breach, AVS
+// Environment, Severity, Status, Dependant Team, OS, Category, PCI, SLA Breach, AVS
 // Level) are converted into the dashboard's own filter object and applied
 // with the dashboard's own recordMatchesFilters() predicate (filters.js).
 // The chatbot never re-implements filtering: it only decides *which*

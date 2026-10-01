@@ -4,7 +4,7 @@ const FILTER_FIELDS=[
   {key:'environment',label:'Environment',field:'Environment'},
   {key:'severity',label:'Severity',field:'Severity'},
   {key:'status',label:'Status',field:'Status'},
-  {key:'vendor',label:'Vendor',field:'Vendor'},
+  {key:'dependant_team',label:'Dependant Team',field:'DependantTeam'},
   {key:'app_space_team',label:'Team',field:'AppSpaceTeam'},
   {key:'operating_system',label:'Operating System',field:'Operating System'},
   {key:'type_category',label:'Category',field:'Type Category'},
