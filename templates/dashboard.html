@@ -10,7 +10,10 @@
   <main class="shell">
     <header class="topbar">
       <div><p class="eyebrow">SECURITY OPERATIONS / LOCAL REPORT</p><h1>Vulnerability Dashboard</h1><p class="subtitle">Risk posture, remediation velocity, and SLA exposure in one view.</p></div>
-      <div id="statusChip" class="status-chip"><span id="statusDot" class="status-dot"></span><span id="reportStatus">Awaiting report</span></div>
+      <div class="topbar-right">
+        <div id="statusChip" class="status-chip"><span id="statusDot" class="status-dot"></span><span id="reportStatus">Awaiting report</span></div>
+        <label class="filter-control group-filter-control" for="groupFilter"><span>Group</span><select id="groupFilter" data-filter="group" aria-label="Group filter"></select></label>
+      </div>
     </header>
     {% if load_error %}<section class="empty-state"><strong>Report not loaded</strong><span>{{ load_error }}</span><small>Place a CSV at <code>data/vulnerability_report.csv</code> and refresh.</small></section>{% endif %}
     <section class="toolbar" aria-label="Dashboard filters">
@@ -76,7 +79,7 @@
     <section class="section-heading"><div><p class="eyebrow">06 / PATTERNS</p><h2>Recurring findings and compliance</h2></div></section>
     <section class="insight-grid"><article class="panel"><div class="panel-head"><div><h3>Top CVEs</h3><p>Most frequent identifiers</p></div></div><div id="cveList" class="rank-list"></div></article><article class="panel"><div class="panel-head"><div><h3>Top QIDs</h3><p>Most frequent Qualys IDs</p></div></div><div id="qidList" class="rank-list"></div></article><article class="panel compliance-panel"><div class="panel-head"><div><h3>PCI compliance</h3><p>Required vulnerabilities in scope</p></div></div><div id="pciMetric" class="compliance-metric"></div></article></section>
     <section class="section-heading"><div><p class="eyebrow">07 / FINDINGS</p><h2>Vulnerability register</h2></div><div class="table-tools"><input id="tableSearch" type="search" placeholder="Search server, QID, CVE..." aria-label="Search vulnerabilities"><select id="recordsPageSize" class="table-select" aria-label="Rows per page"><option value="15" selected>15 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><span id="tableCount" class="muted"></span></div></section>
-    <section class="panel table-panel"><div class="table-wrap"><table id="recordsTable"><thead><tr><th>Server</th><th>OS</th><th>Environment</th><th>AppSpace</th><th>Dependant team</th><th>QID</th><th>Finding</th><th>Severity</th><th>CVSS</th><th>First detected</th><th>Days open</th><th>SLA due</th><th>Status</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="previousPage" class="button button-quiet">Previous</button><span id="pageInfo"></span><button id="nextPage" class="button button-quiet">Next</button></div></section>
+    <section class="panel table-panel"><div class="table-wrap"><table id="recordsTable"><thead><tr><th>Server</th><th>OS</th><th>Environment</th><th>AppSpace</th><th>Dependant team</th><th>Group</th><th>QID</th><th>Finding</th><th>Severity</th><th>CVSS</th><th>First detected</th><th>Days open</th><th>SLA due</th><th>Status</th></tr></thead><tbody></tbody></table></div><div class="pagination"><button id="previousPage" class="button button-quiet">Previous</button><span id="pageInfo"></span><button id="nextPage" class="button button-quiet">Next</button></div></section>
     <footer>Processed source <span id="sourcePath">output/processed_vulnerabilities.csv</span> <span class="footer-separator">•</span> Rules: Critical 7d / High 30d / Medium 60d / Low 90d</footer>
   </main>
   <div id="archiveModal" class="archive-modal" hidden>

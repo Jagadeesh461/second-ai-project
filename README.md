@@ -140,6 +140,7 @@ Vuln management/
 |   |-- __init__.py
 |   |-- date_utils.py
 |   |-- dependant_team.py
+|   |-- group.py
 |   `-- calculation_utils.py
 |
 |-- templates/
@@ -147,6 +148,7 @@ Vuln management/
 |
 `-- static/
     |-- dependant_team_mapping.json
+    |-- group_mapping.json
     |-- css/
     |   `-- dashboard.css
     `-- js/
@@ -188,7 +190,7 @@ A small standalone Python example created before the dashboard. It is not used b
 
 Defines the `Vulnerability` data model.
 
-It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, dependant team, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
+It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, dependant team, group, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
 
 The file also defines the supported standard severity values:
 
@@ -219,6 +221,7 @@ Responsibilities:
 - Normalizes severity and status values.
 - Calculates vulnerability age (`LastDetected` minus `FirstDetected`, in days), aging bucket, SLA due date, overdue state, and breach state.
 - Resolves `DependantTeam` from the `Detection` value using the keyword rules in `static/dependant_team_mapping.json`.
+- Resolves `Group` from the resolved `DependantTeam` value using the rule in `static/group_mapping.json` (`Change/ITO` -> `Suncorp Bank`; every other `DependantTeam` -> `Suncorp Group`).
 - Returns records plus metadata such as skipped duplicates, invalid dates, and original columns.
 
 The required standard input columns are `ServerName`, `OperatingSystem`, `Environment`, `AppSpaceId`, `AppSpaceName`, `AppSpaceTeam`, `QID`, `VulnerabilityName`, `Severity`, `AssetRiskScore`, `PCIRequired`, `Category`, `CVE`, `VendorReference`, `FirstDetected`, `LastDetected`, `Resolved`, `SIABreach`, and `Status`.
@@ -241,6 +244,7 @@ It calculates:
 - Aging by severity and status
 - Environment metrics
 - DependantTeam counts
+- Group counts
 - AppSpace risk matrix data
 - Top vulnerable servers
 - Top CVEs
@@ -274,6 +278,18 @@ Resolves the `DependantTeam` value for each finding.
 
 Holds every `Detection` keyword to `DependantTeam` rule as a flat JSON object, for example `"/apps/ctm": "Control-M"` and `"splunk": "AppHealth"`. Edit this file to change the mapping; no code change is needed.
 
+### `utils/group.py`
+
+Resolves the `Group` value for each finding from its already-resolved `DependantTeam` value.
+
+- Loads the rules from `static/group_mapping.json`.
+- Looks up the `DependantTeam` value case-insensitively.
+- Returns `Suncorp Group` when the `DependantTeam` is empty or matches no rule.
+
+### `static/group_mapping.json`
+
+Holds every `DependantTeam` to `Group` rule as a flat JSON object. Ships with `{"Change/ITO": "Suncorp Bank"}`, so `Change/ITO` resolves to `Suncorp Bank` and every other `DependantTeam` (Wintel, Midrange, Dynatrace, Control-M, AppHealth, Other, ...) resolves to the default `Suncorp Group`. Edit this file to change the mapping; no code change is needed.
+
 ### `utils/calculation_utils.py`
 
 Contains reusable business rules.
@@ -301,7 +317,7 @@ The main server-rendered dashboard page.
 
 It defines the page structure for:
 
-- Header and report status
+- Header, report status, and the primary Group filter (top-right, above the regular filter toolbar)
 - Filter toolbar
 - KPI cards
 - Severity, SLA, and aging charts
@@ -350,6 +366,7 @@ It:
 - Adds environment, severity, status, dependant team, AppSpace, team, operating system, and category options.
 - Escapes option text before inserting it into the page.
 - Returns the selected filter values to the main dashboard script.
+- Resolves the `Group` filter definition (`key: 'group'`, values `Suncorp Bank` / `Suncorp Group`) so the primary Group selector rendered in the topbar (see `templates/dashboard.html`) participates in `getFilters()`/`recordMatchesFilters()`/`optionValues()` exactly like the regular toolbar filters, even though it is not one of the auto-rendered `FILTER_FIELDS`.
 
 ### `static/js/dashboard.js`
 
@@ -445,13 +462,14 @@ Stop the server with `Ctrl+C`.
 
 ## Using the Dashboard
 
-1. Use the dropdowns in the dark filter toolbar to select environment, severity, status, dependant team, AppSpace, team, operating system, or category.
-2. Use the search box to find a server, QID, CVE, or vulnerability name.
-3. All KPI cards, charts, matrix rows, critical findings, ranking lists, and table rows update to the current scope.
-4. Use Reset filters to return to the full report.
-5. Use Export report to download the current filtered and searched records as a CSV file.
-6. Use the table pagination controls to move through the findings without rendering all rows at once.
-7. Use the assistant button in the bottom-right corner to ask questions about the findings currently in scope. Pick a suggested question or type your own. Chat history lasts for the browser session only.
+1. Use the Group selector in the top-right corner (below the findings-loaded indicator) to scope the entire dashboard to `Suncorp Bank`, `Suncorp Group`, or `All`. This is the primary/global filter and combines with every other filter below.
+2. Use the dropdowns in the dark filter toolbar to select environment, severity, status, dependant team, AppSpace, team, operating system, or category.
+3. Use the search box to find a server, QID, CVE, or vulnerability name.
+4. All KPI cards, charts, matrix rows, critical findings, ranking lists, and table rows update to the current scope.
+5. Use Reset filters to return to the full report.
+6. Use Export report to download the current filtered and searched records as a CSV file.
+7. Use the table pagination controls to move through the findings without rendering all rows at once.
+8. Use the assistant button in the bottom-right corner to ask questions about the findings currently in scope, including the Group filter (e.g. "How many Critical findings for Suncorp Bank?"). Pick a suggested question or type your own. Chat history lasts for the browser session only.
 
 ## Error Handling
 
@@ -480,6 +498,6 @@ Run the unit tests from the project directory:
 py -m unittest discover -s tests
 ```
 
-The suite covers the AVS calculator, the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
+The suite covers the AVS calculator, the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, the `DependantTeam` to `Group` mapping and Group dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
 
 The report currently loads dynamically from the CSV. With the provided report, the API should return the actual number of parsed records and the filter option lists derived from those records.

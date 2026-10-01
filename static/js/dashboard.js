@@ -12,7 +12,7 @@ function matchingRecords() {
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
 function buildFilteredCsv(records) {
-  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'DependantTeam', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLA Breach', 'Overdue', 'Aging Bucket'];
+  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'DependantTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLA Breach', 'Overdue', 'Aging Bucket'];
   return [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(record[column])).join(','))].join('\r\n');
 }
 
@@ -209,7 +209,7 @@ function rankList(id, records, key) {
 }
 
 function renderRegisterRow(r) {
-  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.DependantTeam || 'Other')}</td><td>${esc(r.QID)}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r['SLA Breach'] ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
+  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.DependantTeam || 'Other')}</td><td>${esc(r.Group || 'Suncorp Group')}</td><td>${esc(r.QID)}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r['SLA Breach'] ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
 }
 
 function recordSearchText(record) { return JSON.stringify(record).toLowerCase(); }
@@ -217,7 +217,7 @@ function recordSearchText(record) { return JSON.stringify(record).toLowerCase();
 const registerTable = createDataTable({
   tbodyId: 'recordsTable', searchInputId: 'tableSearch', pageSizeSelectId: 'recordsPageSize',
   previousButtonId: 'previousPage', nextButtonId: 'nextPage', pageInfoId: 'pageInfo', countId: 'tableCount',
-  colSpan: 13, renderRow: renderRegisterRow, emptyMessage: 'No vulnerabilities match the current scope',
+  colSpan: 14, renderRow: renderRegisterRow, emptyMessage: 'No vulnerabilities match the current scope',
   matches: (row, query) => recordSearchText(row).includes(query),
 });
 

@@ -36,11 +36,12 @@ const ASSISTANT_FILTER_FIELD_CUES = {
   dependant_team: ['dependant team', 'dependent team', 'dependant', 'dependent'],
   operating_system: ['operating system', 'os'],
   type_category: ['category'],
+  group: ['group'],
 };
 
 // Fields whose values are free text and must be recognised from the actual
 // dataset rather than a fixed vocabulary.
-const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'dependant_team', 'operating_system', 'type_category', 'environment'];
+const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'dependant_team', 'operating_system', 'type_category', 'environment', 'group'];
 
 function assistantFieldOptions(records, key) {
   // Reuses the dashboard's own option-listing helper (filters.js) so every
@@ -570,9 +571,9 @@ const ASSISTANT_INTENT_OWNED_FIELDS = {
 // produces a structured answer.
 //
 // Any filter criteria named in the question (AppSpace, Owner, Team,
-// Environment, Severity, Status, Dependant Team, OS, Category, PCI, SLA Breach, AVS
-// Level) are converted into the dashboard's own filter object and applied
-// with the dashboard's own recordMatchesFilters() predicate (filters.js).
+// Environment, Severity, Status, Dependant Team, Group, OS, Category, PCI, SLA
+// Breach, AVS Level) are converted into the dashboard's own filter object and
+// applied with the dashboard's own recordMatchesFilters() predicate (filters.js).
 // The chatbot never re-implements filtering: it only decides *which*
 // dashboard filters a question means, then reuses the exact same logic the
 // filter dropdowns use, so both surfaces always agree on the result set.
