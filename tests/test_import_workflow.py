@@ -122,7 +122,8 @@ class ImportWorkflowTests(unittest.TestCase):
 
     def test_process_latest_report_writes_processed_csv_and_cached_stats(self):
         self.write_standard_csv(self.data_dir / "latest.csv")
-        expected_age = str((date.today() - date(2026, 9, 1)).days)
+        expected_age = str((date(2026, 9, 12) - date(2026, 9, 1)).days)
+        expected_days_open = str((date.today() - date(2026, 9, 1)).days)
 
         result = service.process_latest_report(force=True)
 
@@ -134,7 +135,7 @@ class ImportWorkflowTests(unittest.TestCase):
         with service.PROCESSED_REPORT_PATH.open("r", encoding="utf-8", newline="") as handle:
             rows = list(csv.DictReader(handle))
         self.assertEqual(rows[0]["Vulnerability Age"], expected_age)
-        self.assertEqual(rows[0]["Days Open"], expected_age)
+        self.assertEqual(rows[0]["Days Open"], expected_days_open)
         self.assertEqual(rows[0]["ServerName"], "server-01")
         dashboard = json.loads(service.DASHBOARD_STATS_PATH.read_text(encoding="utf-8"))
         self.assertEqual(dashboard["meta"]["record_count"], 1)

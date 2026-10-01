@@ -9,6 +9,7 @@ from pathlib import Path
 from models.vulnerability import Vulnerability
 from utils.calculation_utils import aging_bucket, calculate_sla, normalize_severity, normalize_status
 from utils.date_utils import parse_bool, parse_date, parse_number
+from utils.dependant_team import resolve_dependant_team
 
 
 STANDARD_COLUMNS = (
@@ -29,7 +30,7 @@ PROCESSED_COLUMNS = (
     "id", "ServerName", "Operating System", "Environment", "AssetType", "AppSpaceName", "AppSpaceId",
     "AppSpaceOwner", "AppSpaceTeam", "QID", "Vulnerability Name", "Severity", "CVSS Base Score",
     "AssetRiskScore", "QDS", "CVE", "Vendor", "VendorReference", "Type", "Category", "Type Category",
-    "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
+    "DependantTeam", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
     "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "SLA Breach", "Overdue",
     "Aging Bucket", "Detection", "Solution", "PatchAvailable", "ThreatIntel", "ReleaseDate",
     "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
@@ -165,6 +166,7 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             asset_risk_score=parse_number(_value(cleaned, "AssetRiskScore")),
             cve=_value(cleaned, "CVE") or "N/A",
             vendor=_value(cleaned, "VendorReference") or "Unknown",
+            dependant_team=resolve_dependant_team(_value(cleaned, "Detection")),
             type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
             pci_required=bool(parse_bool(_value(cleaned, "PCIRequired"))),
             status=normalize_status(_value(cleaned, "Status")),
@@ -174,8 +176,9 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             source_sla_breach=parse_bool(_value(cleaned, "SIABreach")),
             warnings=warnings,
         )
-        vulnerability.age_days = max((today - first).days, 0) if first else 0
-        vulnerability.aging_bucket = aging_bucket(vulnerability.age_days) if first else "Unknown"
+        vulnerability.age_days = max((last - first).days, 0) if first and last else 0
+        vulnerability.days_open = max((today - first).days, 0) if first else 0
+        vulnerability.aging_bucket = aging_bucket(vulnerability.age_days) if first and last else "Unknown"
         vulnerability.__dict__.update(calculate_sla(first, vulnerability.severity, vulnerability.status, resolution, today))
         records.append(vulnerability)
     return records, {"duplicates_skipped": duplicate_count, "invalid_dates": invalid_date_count, "columns": fieldnames, "source_format": "workbook" if _is_workbook(csv_path) else "csv"}
@@ -202,6 +205,7 @@ def processed_row(record: Vulnerability) -> dict[str, object]:
         "LastPatchAttempt": _value(raw, "LastPatchAttempt"),
         "LeaderName": _value(raw, "LeaderName"),
         "BaselinePublished": _value(raw, "BaselinePublished"),
+        "DependantTeam": record.dependant_team,
         "Vulnerability Age": record.age_days,
     })
     return {column: row.get(column, "") for column in PROCESSED_COLUMNS}

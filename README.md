@@ -102,7 +102,7 @@ Browser JavaScript renders KPIs, charts, filters, tables, and export files
 5. If a new file is detected, or the user clicks Import Report, the CSV loader validates the exact standard columns.
 6. The CSV loader reads each row, removes exact duplicates, and handles missing values.
 7. Each row becomes a `Vulnerability` object.
-8. SLA due dates, vulnerability age, overdue status, and breach status are calculated from the record data and current date.
+8. Vulnerability age (`LastDetected` minus `FirstDetected`), SLA due dates, overdue status, and breach status are calculated from the record data and current date.
 9. The processed dataset is saved to `output/processed_vulnerabilities.csv`.
 10. The service calculates aggregate statistics once and saves them to `output/dashboard_stats.json`.
 11. The template embeds the cached JSON in the page.
@@ -139,12 +139,14 @@ Vuln management/
 |-- utils/
 |   |-- __init__.py
 |   |-- date_utils.py
+|   |-- dependant_team.py
 |   `-- calculation_utils.py
 |
 |-- templates/
 |   `-- dashboard.html
 |
 `-- static/
+    |-- dependant_team_mapping.json
     |-- css/
     |   `-- dashboard.css
     `-- js/
@@ -186,7 +188,7 @@ A small standalone Python example created before the dashboard. It is not used b
 
 Defines the `Vulnerability` data model.
 
-It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
+It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, dependant team, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
 
 The file also defines the supported standard severity values:
 
@@ -215,7 +217,8 @@ Responsibilities:
 - Parses dates, numbers, and boolean values.
 - Removes exact duplicate rows.
 - Normalizes severity and status values.
-- Calculates vulnerability age, aging bucket, SLA due date, overdue state, and breach state.
+- Calculates vulnerability age (`LastDetected` minus `FirstDetected`, in days), aging bucket, SLA due date, overdue state, and breach state.
+- Resolves `DependantTeam` from the `Detection` value using the keyword rules in `static/dependant_team_mapping.json`.
 - Returns records plus metadata such as skipped duplicates, invalid dates, and original columns.
 
 The required standard input columns are `ServerName`, `OperatingSystem`, `Environment`, `AppSpaceId`, `AppSpaceName`, `AppSpaceTeam`, `QID`, `VulnerabilityName`, `Severity`, `AssetRiskScore`, `PCIRequired`, `Category`, `CVE`, `VendorReference`, `FirstDetected`, `LastDetected`, `Resolved`, `SIABreach`, and `Status`.
@@ -237,7 +240,7 @@ It calculates:
 - Aging distribution
 - Aging by severity and status
 - Environment metrics
-- Vendor counts
+- DependantTeam counts
 - AppSpace risk matrix data
 - Top vulnerable servers
 - Top CVEs
@@ -258,6 +261,19 @@ Provides safe parsing helpers:
 
 Invalid values return safe empty results instead of crashing the application.
 
+### `utils/dependant_team.py`
+
+Resolves the `DependantTeam` value for each finding.
+
+- Loads the keyword rules from `static/dependant_team_mapping.json`.
+- Matches the raw `Detection` value against every keyword, case-insensitively.
+- Uses the longest matching keyword when several rules match, so the most specific rule wins.
+- Returns `Other` when the detection is empty or matches no rule.
+
+### `static/dependant_team_mapping.json`
+
+Holds every `Detection` keyword to `DependantTeam` rule as a flat JSON object, for example `"/apps/ctm": "Control-M"` and `"splunk": "AppHealth"`. Edit this file to change the mapping; no code change is needed.
+
 ### `utils/calculation_utils.py`
 
 Contains reusable business rules.
@@ -275,7 +291,7 @@ It also:
 
 - Normalizes severity values such as `Sev1` and `P1`.
 - Normalizes status values such as `Fixed` and `Remediated`.
-- Assigns aging buckets from the first detected date.
+- Assigns aging buckets from the vulnerability age.
 - Calculates SLA due date, breach state, overdue state, days remaining, and days overdue.
 - Uses the resolution date for resolved and closed findings when available.
 
@@ -331,7 +347,7 @@ Builds the filter controls from the option lists returned by Python.
 It:
 
 - Creates labeled dropdowns.
-- Adds environment, severity, status, vendor, AppSpace, team, operating system, and category options.
+- Adds environment, severity, status, dependant team, AppSpace, team, operating system, and category options.
 - Escapes option text before inserting it into the page.
 - Returns the selected filter values to the main dashboard script.
 
@@ -429,7 +445,7 @@ Stop the server with `Ctrl+C`.
 
 ## Using the Dashboard
 
-1. Use the dropdowns in the dark filter toolbar to select environment, severity, status, vendor, AppSpace, team, operating system, or category.
+1. Use the dropdowns in the dark filter toolbar to select environment, severity, status, dependant team, AppSpace, team, operating system, or category.
 2. Use the search box to find a server, QID, CVE, or vulnerability name.
 3. All KPI cards, charts, matrix rows, critical findings, ranking lists, and table rows update to the current scope.
 4. Use Reset filters to return to the full report.
@@ -464,6 +480,6 @@ Run the unit tests from the project directory:
 py -m unittest discover -s tests
 ```
 
-The suite covers the AVS calculator, the import workflow, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
+The suite covers the AVS calculator, the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
 
 The report currently loads dynamically from the CSV. With the provided report, the API should return the actual number of parsed records and the filter option lists derived from those records.
