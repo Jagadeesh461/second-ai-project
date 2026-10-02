@@ -105,7 +105,8 @@ body {
   color: var(--ink);
 }
 
-.group-filter-control span {
+.topbar-right .group-filter-control span {
+  color: var(--ink);
   text-align: right;
   padding-left: 0;
   padding-right: 2px;
