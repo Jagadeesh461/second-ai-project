@@ -353,6 +353,7 @@ It renders:
 - Donut chart for severity distribution
 - Grouped bar charts for status and SLA
 - Horizontal bar charts for aging and vulnerable servers
+- Clickable filled pie chart (`pie` + `pieSliceAt` hit-testing) for the AVS drill-down categories
 
 No external chart service or backend connection is used.
 
@@ -391,6 +392,15 @@ It:
 - Defines the zone and asset rating constants and the Low / Medium / High thresholds.
 - Computes per-AppSpace scores from a record set, deduplicating by CVE (or vendor reference when no CVE exists).
 - Contains no DOM access, so both `avs.js` and the assistant reuse the same numbers.
+- Provides `computeAvsDrilldown(records, appId)` for the AVS List drill-down. It reuses the exact AVS inclusion rule (`avsQualifies`: Severity 4/5, age > 45 days) and uniqueness key (`avsDedupKey`: CVE, else vendor reference), so a drill-down total always equals that application's "Unique Vulnerabilities" count. Each unique vulnerability is grouped into one of `CoreOS`, `Java`, `Agents`, `ThirdParty`, `Others` (from the source `Category` column; unrecognised values fall into `Others`), with percentages rounded to one decimal using largest-remainder rounding so they always total 100%. Average age is the mean of the unique vulnerabilities' ages (oldest occurrence per vulnerability). Sev4/Sev5 counts come from the raw source `Severity` value, exposed on each record as `Severity Level`.
+
+### `static/js/avs.js`
+
+Renders the AVS section: KPI cards, charts, the AVS List table, and the application drill-down.
+
+- Clicking (or pressing Enter on) an AVS List row opens the drill-down directly below the table, titled with the AppSpace name: KPI cards (total unique Sev4/5 vulnerabilities, average age, Sev4 and Sev5 counts), a category pie chart, and a category breakdown table.
+- Clicking a pie slice, legend chip, or breakdown row shows the category detail table (Vulnerability Name, CVE Number, Severity, First Detected Date, Age, Solution). The Severity column shows `Sev4` / `Sev5` badges and, when a unique vulnerability groups several findings, `Sev4 Count : X` / `Sev5 Count : Y`.
+- Clicking the selected row again, or Close, hides the drill-down. It also recomputes with the dashboard filters and hides itself if the selected application leaves the filtered scope.
 
 ### `static/js/assistant-engine.js`
 
@@ -470,6 +480,7 @@ Stop the server with `Ctrl+C`.
 6. Use Export report to download the current filtered and searched records as a CSV file.
 7. Use the table pagination controls to move through the findings without rendering all rows at once.
 8. Use the assistant button in the bottom-right corner to ask questions about the findings currently in scope, including the Group filter (e.g. "How many Critical findings for Suncorp Bank?"). Pick a suggested question or type your own. Chat history lasts for the browser session only.
+9. Click an application in the AVS List to open its drill-down: a category pie chart of unique Severity 4/5 vulnerabilities older than 45 days. Click a slice to list that category's vulnerabilities.
 
 ## Error Handling
 
@@ -498,6 +509,6 @@ Run the unit tests from the project directory:
 py -m unittest discover -s tests
 ```
 
-The suite covers the AVS calculator, the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, the `DependantTeam` to `Group` mapping and Group dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
+The suite covers the AVS calculator, the AVS List drill-down (category pie, percentages, uniqueness, age filter, Sev4/Sev5 detail), the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, the `DependantTeam` to `Group` mapping and Group dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
 
 The report currently loads dynamically from the CSV. With the provided report, the API should return the actual number of parsed records and the filter option lists derived from those records.

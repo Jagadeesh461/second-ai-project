@@ -154,3 +154,74 @@ function horizontalBars(canvas, entries, color) {
     ctx.fillText(shortNumber(value), labelX, y + barH / 2);
   });
 }
+
+// Filled pie chart. Returns slice geometry (in CSS pixels) so callers can map
+// a click position back to a slice with pieSliceAt().
+function pie(canvas, entries, colorMap, selected) {
+  const { ctx, w, h } = setupCanvas(canvas);
+  const total = entries.reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+  const cx = w / 2;
+  const cy = h / 2;
+  const radius = Math.max(10, Math.min(w, h) / 2 - 12);
+  const geometry = { cx, cy, radius, slices: [] };
+
+  if (!total) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#e4ecec';
+    ctx.fill();
+    ctx.fillStyle = '#71808a';
+    ctx.font = '700 11px Manrope, Segoe UI, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No data', cx, cy);
+    return geometry;
+  }
+
+  let start = -Math.PI / 2;
+  entries.forEach(entry => {
+    const value = Number(entry.value) || 0;
+    if (!value) return;
+    const angle = value / total * Math.PI * 2;
+    const end = start + angle;
+    const isSelected = selected === entry.label;
+    const dimmed = selected && !isSelected;
+    const mid = start + angle / 2;
+    const offset = isSelected && angle < Math.PI * 2 ? 8 : 0;
+    const ox = cx + Math.cos(mid) * offset;
+    const oy = cy + Math.sin(mid) * offset;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.arc(ox, oy, radius - 8, start, end);
+    ctx.closePath();
+    ctx.globalAlpha = dimmed ? 0.45 : 1;
+    ctx.fillStyle = (colorMap && colorMap[entry.label]) || COLORS[entry.label] || COLORS.Unknown;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    if (angle > 0.3) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 11px Manrope, Segoe UI, Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const labelR = (radius - 8) * 0.62;
+      ctx.fillText(entry.text || shortNumber(value), ox + Math.cos(mid) * labelR, oy + Math.sin(mid) * labelR);
+    }
+    geometry.slices.push({ label: entry.label, start, end });
+    start = end;
+  });
+  return geometry;
+}
+
+function pieSliceAt(geometry, x, y) {
+  if (!geometry) return null;
+  const dx = x - geometry.cx;
+  const dy = y - geometry.cy;
+  if (Math.sqrt(dx * dx + dy * dy) > geometry.radius) return null;
+  let angle = Math.atan2(dy, dx);
+  if (angle < -Math.PI / 2) angle += Math.PI * 2;
+  const slice = geometry.slices.find(s => angle >= s.start && angle < s.end);
+  return slice ? slice.label : null;
+}

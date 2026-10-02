@@ -9,6 +9,15 @@
 // logic is implemented for the cards.
 let avsActiveLevel = 'all';
 
+// AVS List drill-down state: the selected application row and, within it, the
+// selected pie category. Both null when nothing is selected.
+let avsSelectedAppId = null;
+let avsSelectedCategory = null;
+let avsLastRecords = [];
+let avsCurrentDrilldown = null;
+let avsPieGeometry = null;
+const AVS_CATEGORY_COLORS = { CoreOS: '#f2661e', Java: '#0f1b2d', Agents: '#5b6b8f', ThirdParty: '#2f9d6c', Others: '#e8b23c' };
+
 function avsKpiCard(label, value, icon, tone, level) {
   const isActive = avsActiveLevel === level;
   return `<article class="kpi kpi-clickable ${tone}${isActive ? ' kpi-active' : ''}" data-avs-level="${level}" role="button" tabindex="0" aria-pressed="${isActive}"><div class="kpi-label"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${(value || 0).toLocaleString()}</div></article>`;
@@ -60,10 +69,13 @@ function renderAvs(records) {
   horizontalBars($('avsTeamChart'), teamEntries, '#f2661e');
 
   avsTable.update(apps);
+  avsLastRecords = records;
+  avsRefreshDrilldown(apps);
 }
 
 function renderAvsRow(a) {
-  return `<tr><td><strong>${esc(a.name)}</strong></td><td>${esc(a.team)}</td><td>${a.score.toFixed(1)}</td><td>${badge(a.level, 'avs')}</td><td>${a.uniqueCount}</td><td>${esc(a.assetType)}</td><td>${esc(a.zone)}</td></tr>`;
+  const selected = a.appId === avsSelectedAppId;
+  return `<tr class="avs-row-clickable${selected ? ' avs-row-selected' : ''}" data-app-id="${esc(a.appId)}" tabindex="0" aria-selected="${selected}" title="View AVS drill-down"><td><strong>${esc(a.name)}</strong></td><td>${esc(a.team)}</td><td>${a.score.toFixed(1)}</td><td>${badge(a.level, 'avs')}</td><td>${a.uniqueCount}</td><td>${esc(a.assetType)}</td><td>${esc(a.zone)}</td></tr>`;
 }
 
 const avsTable = createDataTable({
@@ -87,6 +99,178 @@ const avsTable = createDataTable({
     if (!card) return;
     event.preventDefault();
     avsSetActiveLevel(card.dataset.avsLevel);
+  });
+})();
+
+// ----------------------------- Drill-down ---------------------------------
+
+function avsSeverityCell(v) {
+  const badges = [];
+  if (v.sev4) badges.push('<span class="avs-sev-badge avs-sev-4">Sev4</span>');
+  if (v.sev5) badges.push('<span class="avs-sev-badge avs-sev-5">Sev5</span>');
+  if (!badges.length) badges.push(`<span class="avs-sev-badge">${esc(v.severityLabel)}</span>`);
+  const counts = v.occurrences > 1 ? `<div class="avs-sev-counts">Sev4 Count : ${v.sev4}<br>Sev5 Count : ${v.sev5}</div>` : '';
+  return `<div class="avs-sev-cell">${badges.join('')}</div>${counts}`;
+}
+
+function renderAvsDetailRow(v) {
+  return `<tr><td><strong>${esc(v.name)}</strong></td><td>${esc(v.cve)}</td><td>${avsSeverityCell(v)}</td><td>${esc(v.firstDetected || '—')}</td><td>${v.age} days</td><td class="avs-solution">${esc(v.solution || '—')}</td></tr>`;
+}
+
+const avsDetailTable = createDataTable({
+  tbodyId: 'avsDetailTable', searchInputId: 'avsDetailSearch', pageSizeSelectId: 'avsDetailPageSize',
+  previousButtonId: 'avsDetailPreviousPage', nextButtonId: 'avsDetailNextPage', pageInfoId: 'avsDetailPageInfo', countId: 'avsDetailCount',
+  colSpan: 6, renderRow: renderAvsDetailRow, emptyMessage: 'No vulnerabilities in this category',
+  matches: (row, query) => `${row.name} ${row.cve} ${row.severityLabel} ${row.solution}`.toLowerCase().includes(query),
+});
+
+function avsMarkSelectedRow() {
+  const table = document.getElementById('avsTable');
+  if (!table || !table.querySelectorAll) return;
+  table.querySelectorAll('tr[data-app-id]').forEach(row => {
+    const selected = row.dataset.appId === avsSelectedAppId;
+    row.classList.toggle('avs-row-selected', selected);
+    row.setAttribute('aria-selected', String(selected));
+  });
+}
+
+function avsHideDrilldown() {
+  const section = document.getElementById('avsDrilldown');
+  if (section) section.hidden = true;
+  avsCurrentDrilldown = null;
+  avsPieGeometry = null;
+}
+
+function avsRenderCategoryDetail() {
+  const detail = document.getElementById('avsCategoryDetail');
+  const drill = avsCurrentDrilldown;
+  if (!detail || !drill) return;
+  const category = drill.categories.find(c => c.name === avsSelectedCategory);
+  if (!category || !category.count) {
+    avsSelectedCategory = null;
+    detail.hidden = true;
+    return;
+  }
+  const rows = avsDrilldownCategoryRows(drill, category.name);
+  const sev4 = rows.reduce((sum, v) => sum + v.sev4, 0);
+  const sev5 = rows.reduce((sum, v) => sum + v.sev5, 0);
+  document.getElementById('avsCategoryDetailTitle').textContent = `${drill.name} · ${category.name}`;
+  document.getElementById('avsCategoryDetailSummary').textContent =
+    `${category.count.toLocaleString()} unique vulnerabilities (${category.percent.toFixed(1)}%) · Sev4 Count : ${sev4.toLocaleString()} · Sev5 Count : ${sev5.toLocaleString()}`;
+  detail.hidden = false;
+  avsDetailTable.update(rows);
+}
+
+function avsRenderDrilldown() {
+  const drill = avsCurrentDrilldown;
+  if (!drill) return;
+  document.getElementById('avsDrilldownTitle').textContent = drill.name;
+  const kpis = [
+    ['Total Unique Sev4/5 Vulnerabilities', drill.total.toLocaleString(), '▦', '', 'Unique (CVE/Vendor) Severity 4 & 5 vulnerabilities older than 45 days'],
+    ['Average Age', `${drill.averageAge.toLocaleString()} Days`, '◷', 'kpi-warning', 'Average age of the included unique vulnerabilities'],
+    ['Sev4 Count', drill.sev4.toLocaleString(), '●', 'kpi-warning', 'Findings with source Severity 4 behind the unique vulnerabilities'],
+    ['Sev5 Count', drill.sev5.toLocaleString(), '▲', 'kpi-critical', 'Findings with source Severity 5 behind the unique vulnerabilities'],
+  ];
+  document.getElementById('avsDrilldownKpis').innerHTML = kpis
+    .map(([label, value, icon, tone, hint]) => `<article class="kpi ${tone}" title="${esc(hint)}"><div class="kpi-label"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${value}</div></article>`)
+    .join('');
+
+  const entries = drill.categories.map(c => ({ label: c.name, value: c.count, text: `${Math.round(c.percent)}%` }));
+  avsPieGeometry = pie(document.getElementById('avsCategoryChart'), entries, AVS_CATEGORY_COLORS, avsSelectedCategory);
+
+  document.getElementById('avsCategoryLegend').innerHTML = drill.categories.map(c => {
+    const active = c.name === avsSelectedCategory;
+    return `<button type="button" class="legend-item legend-button${active ? ' legend-active' : ''}" data-avs-category="${esc(c.name)}" aria-pressed="${active}"${c.count ? '' : ' disabled'}><i class="legend-dot" style="background:${AVS_CATEGORY_COLORS[c.name]}"></i>${esc(c.name)} ${c.percent.toFixed(1)}%</button>`;
+  }).join('');
+
+  document.getElementById('avsCategoryTable').innerHTML = drill.categories.map(c => {
+    const active = c.name === avsSelectedCategory;
+    const attrs = c.count ? ` class="avs-row-clickable${active ? ' avs-row-selected' : ''}" data-avs-category="${esc(c.name)}" tabindex="0" aria-selected="${active}"` : ' class="avs-row-empty"';
+    return `<tr${attrs}><td><i class="legend-dot" style="background:${AVS_CATEGORY_COLORS[c.name]}"></i> ${esc(c.name)}</td><td>${c.count.toLocaleString()}</td><td>${c.percent.toFixed(1)}%</td></tr>`;
+  }).join('') + `<tr class="avs-total-row"><td>Total</td><td>${drill.total.toLocaleString()}</td><td>${drill.total ? '100.0%' : '0.0%'}</td></tr>`;
+
+  avsRenderCategoryDetail();
+}
+
+// Recomputes the drill-down from the current (dashboard-filtered) records.
+// Called on every renderAvs() so filters/resizes keep it in sync; hides the
+// section if the selected application is no longer in scope.
+function avsRefreshDrilldown(apps) {
+  if (!avsSelectedAppId) { avsHideDrilldown(); return; }
+  if (apps && !apps.some(a => a.appId === avsSelectedAppId)) {
+    avsSelectedAppId = null;
+    avsSelectedCategory = null;
+    avsHideDrilldown();
+    return;
+  }
+  avsCurrentDrilldown = computeAvsDrilldown(avsLastRecords, avsSelectedAppId);
+  const section = document.getElementById('avsDrilldown');
+  if (section) section.hidden = false;
+  avsRenderDrilldown();
+}
+
+function avsSelectApp(appId) {
+  const toggleOff = appId === avsSelectedAppId;
+  avsSelectedAppId = toggleOff ? null : appId;
+  avsSelectedCategory = null;
+  avsMarkSelectedRow();
+  const detail = document.getElementById('avsCategoryDetail');
+  if (detail) detail.hidden = true;
+  avsRefreshDrilldown(null);
+  const section = document.getElementById('avsDrilldown');
+  if (!toggleOff && section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function avsSelectCategory(category) {
+  if (!avsCurrentDrilldown) return;
+  avsSelectedCategory = category === avsSelectedCategory ? null : category;
+  const detail = document.getElementById('avsCategoryDetail');
+  if (!avsSelectedCategory && detail) detail.hidden = true;
+  avsRenderDrilldown();
+  if (avsSelectedCategory && detail && detail.scrollIntoView) detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function avsCloseDrilldown() {
+  avsSelectedAppId = null;
+  avsSelectedCategory = null;
+  avsMarkSelectedRow();
+  avsHideDrilldown();
+}
+
+// Delegated activation helper: click + Enter/Space on elements matching `selector`.
+function avsBindActivation(element, selector, handler) {
+  if (!element || !element.addEventListener) return;
+  element.addEventListener('click', event => {
+    const target = event.target.closest(selector);
+    if (target && !target.disabled) handler(target);
+  });
+  element.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const target = event.target.closest(selector);
+    if (!target || target.tagName === 'BUTTON') return;
+    event.preventDefault();
+    handler(target);
+  });
+}
+
+(function bindAvsDrilldown() {
+  avsBindActivation(document.getElementById('avsTable'), 'tr[data-app-id]', row => avsSelectApp(row.dataset.appId));
+  avsBindActivation(document.getElementById('avsCategoryLegend'), '[data-avs-category]', el => avsSelectCategory(el.dataset.avsCategory));
+  avsBindActivation(document.getElementById('avsCategoryTable'), '[data-avs-category]', el => avsSelectCategory(el.dataset.avsCategory));
+  const close = document.getElementById('avsDrilldownClose');
+  if (close && close.addEventListener) close.addEventListener('click', avsCloseDrilldown);
+  const canvas = document.getElementById('avsCategoryChart');
+  if (!canvas || !canvas.addEventListener) return;
+  const sliceFromEvent = event => {
+    const rect = canvas.getBoundingClientRect();
+    return pieSliceAt(avsPieGeometry, event.clientX - rect.left, event.clientY - rect.top);
+  };
+  canvas.addEventListener('click', event => {
+    const slice = sliceFromEvent(event);
+    if (slice) avsSelectCategory(slice);
+  });
+  canvas.addEventListener('mousemove', event => {
+    canvas.style.cursor = sliceFromEvent(event) ? 'pointer' : 'default';
   });
 })();
 
