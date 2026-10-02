@@ -10,6 +10,7 @@ from models.vulnerability import Vulnerability
 from utils.calculation_utils import aging_bucket, calculate_sla, normalize_severity, normalize_status
 from utils.date_utils import parse_bool, parse_date, parse_number
 from utils.dependant_team import resolve_dependant_team
+from utils.group import resolve_group
 
 
 STANDARD_COLUMNS = (
@@ -30,7 +31,7 @@ PROCESSED_COLUMNS = (
     "id", "ServerName", "Operating System", "Environment", "AssetType", "AppSpaceName", "AppSpaceId",
     "AppSpaceOwner", "AppSpaceTeam", "QID", "Vulnerability Name", "Severity", "CVSS Base Score",
     "AssetRiskScore", "QDS", "CVE", "Vendor", "VendorReference", "Type", "Category", "Type Category",
-    "DependantTeam", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
+    "DependantTeam", "Group", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
     "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "SLA Breach", "Overdue",
     "Aging Bucket", "Detection", "Solution", "PatchAvailable", "ThreatIntel", "ReleaseDate",
     "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
@@ -166,7 +167,8 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             asset_risk_score=parse_number(_value(cleaned, "AssetRiskScore")),
             cve=_value(cleaned, "CVE") or "N/A",
             vendor=_value(cleaned, "VendorReference") or "Unknown",
-            dependant_team=resolve_dependant_team(_value(cleaned, "Detection")),
+            dependant_team=(dependant_team := resolve_dependant_team(_value(cleaned, "Detection"))),
+            group=resolve_group(dependant_team),
             type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
             pci_required=bool(parse_bool(_value(cleaned, "PCIRequired"))),
             status=normalize_status(_value(cleaned, "Status")),
