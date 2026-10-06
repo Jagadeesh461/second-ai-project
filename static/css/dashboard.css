@@ -703,11 +703,6 @@ tbody tr.avs-row-selected:hover {
   font-weight: 900;
 }
 
-.avs-sev-cell {
-  display: flex;
-  gap: 4px;
-}
-
 .avs-sev-badge {
   display: inline-flex;
   border-radius: 6px;
@@ -726,13 +721,6 @@ tbody tr.avs-row-selected:hover {
 .avs-sev-badge.avs-sev-5 {
   background: #fde6e5;
   color: #bd3737;
-}
-
-.avs-sev-counts {
-  margin-top: 4px;
-  color: var(--muted);
-  font: 700 10px "DM Mono", Consolas, monospace;
-  line-height: 1.5;
 }
 
 td.avs-solution {

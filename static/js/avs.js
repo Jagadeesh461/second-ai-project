@@ -105,12 +105,8 @@ const avsTable = createDataTable({
 // ----------------------------- Drill-down ---------------------------------
 
 function avsSeverityCell(v) {
-  const badges = [];
-  if (v.sev4) badges.push('<span class="avs-sev-badge avs-sev-4">Sev4</span>');
-  if (v.sev5) badges.push('<span class="avs-sev-badge avs-sev-5">Sev5</span>');
-  if (!badges.length) badges.push(`<span class="avs-sev-badge">${esc(v.severityLabel)}</span>`);
-  const counts = v.occurrences > 1 ? `<div class="avs-sev-counts">Sev4 Count : ${v.sev4}<br>Sev5 Count : ${v.sev5}</div>` : '';
-  return `<div class="avs-sev-cell">${badges.join('')}</div>${counts}`;
+  const tone = v.severity === 'Sev5' ? ' avs-sev-5' : v.severity === 'Sev4' ? ' avs-sev-4' : '';
+  return `<span class="avs-sev-badge${tone}">${esc(v.severity)}</span>`;
 }
 
 function renderAvsDetailRow(v) {
@@ -121,7 +117,7 @@ const avsDetailTable = createDataTable({
   tbodyId: 'avsDetailTable', searchInputId: 'avsDetailSearch', pageSizeSelectId: 'avsDetailPageSize',
   previousButtonId: 'avsDetailPreviousPage', nextButtonId: 'avsDetailNextPage', pageInfoId: 'avsDetailPageInfo', countId: 'avsDetailCount',
   colSpan: 6, renderRow: renderAvsDetailRow, emptyMessage: 'No vulnerabilities in this category',
-  matches: (row, query) => `${row.name} ${row.cve} ${row.severityLabel} ${row.solution}`.toLowerCase().includes(query),
+  matches: (row, query) => `${row.name} ${row.cve} ${row.severity} ${row.solution}`.toLowerCase().includes(query),
 });
 
 function avsMarkSelectedRow() {
@@ -152,11 +148,10 @@ function avsRenderCategoryDetail() {
     return;
   }
   const rows = avsDrilldownCategoryRows(drill, category.name);
-  const sev4 = rows.reduce((sum, v) => sum + v.sev4, 0);
-  const sev5 = rows.reduce((sum, v) => sum + v.sev5, 0);
+  const { sev4, sev5 } = avsSeverityCounts(rows);
   document.getElementById('avsCategoryDetailTitle').textContent = `${drill.name} · ${category.name}`;
   document.getElementById('avsCategoryDetailSummary').textContent =
-    `${category.count.toLocaleString()} unique vulnerabilities (${category.percent.toFixed(1)}%) · Sev4 Count : ${sev4.toLocaleString()} · Sev5 Count : ${sev5.toLocaleString()}`;
+    `${category.count.toLocaleString()} unique Sev4/5 vulnerabilities (${category.percent.toFixed(1)}%) · Unique Sev4 Count : ${sev4.toLocaleString()} · Unique Sev5 Count : ${sev5.toLocaleString()}`;
   detail.hidden = false;
   avsDetailTable.update(rows);
 }
@@ -168,8 +163,8 @@ function avsRenderDrilldown() {
   const kpis = [
     ['Total Unique Sev4/5 Vulnerabilities', drill.total.toLocaleString(), '▦', '', 'Unique (CVE/Vendor) Severity 4 & 5 vulnerabilities older than 45 days'],
     ['Average Age', `${drill.averageAge.toLocaleString()} Days`, '◷', 'kpi-warning', 'Average age of the included unique vulnerabilities'],
-    ['Sev4 Count', drill.sev4.toLocaleString(), '●', 'kpi-warning', 'Findings with source Severity 4 behind the unique vulnerabilities'],
-    ['Sev5 Count', drill.sev5.toLocaleString(), '▲', 'kpi-critical', 'Findings with source Severity 5 behind the unique vulnerabilities'],
+    ['Unique Sev4 Count', drill.sev4.toLocaleString(), '●', 'kpi-warning', 'Unique vulnerabilities whose highest source severity is 4'],
+    ['Unique Sev5 Count', drill.sev5.toLocaleString(), '▲', 'kpi-critical', 'Unique vulnerabilities with source severity 5'],
   ];
   document.getElementById('avsDrilldownKpis').innerHTML = kpis
     .map(([label, value, icon, tone, hint]) => `<article class="kpi ${tone}" title="${esc(hint)}"><div class="kpi-label"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${value}</div></article>`)

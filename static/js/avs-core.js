@@ -94,10 +94,11 @@ function avsPercentages(counts) {
   return floors.map(f => f / 10);
 }
 
-function avsSeverityLabel(sev4, sev5) {
-  if (sev4 && sev5) return 'Sev4 + Sev5';
-  if (sev5) return 'Sev5';
-  if (sev4) return 'Sev4';
+// Each unique vulnerability is reported once, at its highest source severity
+// (Sev5 wins over Sev4), so unique Sev4 + Sev5 counts always equal the total.
+function avsUniqueSeverity(hasSev4, hasSev5) {
+  if (hasSev5) return 'Sev5';
+  if (hasSev4) return 'Sev4';
   return 'Critical';
 }
 
@@ -112,7 +113,7 @@ function computeAvsDrilldown(records, appId) {
     if (!key) return;
     let group = groups.get(key);
     if (!group) {
-      group = { key, cve: '', names: new Map(), categories: new Map(), sev4: 0, sev5: 0, occurrences: 0, firstDetected: null, age: 0, solution: '' };
+      group = { key, cve: '', names: new Map(), categories: new Map(), hasSev4: false, hasSev5: false, firstDetected: null, age: 0, solution: '' };
       groups.set(key, group);
     }
     const cve = (r.CVE || '').trim();
@@ -122,9 +123,8 @@ function computeAvsDrilldown(records, appId) {
     const category = avsCategory(r['Type Category']);
     group.categories.set(category, (group.categories.get(category) || 0) + 1);
     const level = avsSeverityLevel(r);
-    if (level === '4') group.sev4 += 1;
-    if (level === '5') group.sev5 += 1;
-    group.occurrences += 1;
+    if (level === '4') group.hasSev4 = true;
+    if (level === '5') group.hasSev5 = true;
     const first = r['First Detected'];
     if (first && (!group.firstDetected || first < group.firstDetected)) group.firstDetected = first;
     group.age = Math.max(group.age, Number(r['Vulnerability Age']) || 0);
@@ -148,10 +148,7 @@ function computeAvsDrilldown(records, appId) {
     name: mostFrequent(g.names),
     cve: g.cve || 'N/A',
     category: mostFrequent(g.categories, AVS_DRILLDOWN_CATEGORIES),
-    sev4: g.sev4,
-    sev5: g.sev5,
-    occurrences: g.occurrences,
-    severityLabel: avsSeverityLabel(g.sev4, g.sev5),
+    severity: avsUniqueSeverity(g.hasSev4, g.hasSev5),
     firstDetected: g.firstDetected,
     age: g.age,
     solution: g.solution,
@@ -166,8 +163,8 @@ function computeAvsDrilldown(records, appId) {
     name: appName === null ? 'Unknown' : appName,
     total,
     averageAge: total ? Math.round(ageSum / total) : 0,
-    sev4: vulnerabilities.reduce((sum, v) => sum + v.sev4, 0),
-    sev5: vulnerabilities.reduce((sum, v) => sum + v.sev5, 0),
+    sev4: vulnerabilities.filter(v => v.severity === 'Sev4').length,
+    sev5: vulnerabilities.filter(v => v.severity === 'Sev5').length,
     categories: AVS_DRILLDOWN_CATEGORIES.map((name, index) => ({ name, count: counts[index], percent: percents[index] })),
     vulnerabilities,
   };
@@ -175,4 +172,12 @@ function computeAvsDrilldown(records, appId) {
 
 function avsDrilldownCategoryRows(drilldown, category) {
   return drilldown.vulnerabilities.filter(v => v.category === category);
+}
+
+// Unique Sev4 / Sev5 counts for a list of drill-down vulnerabilities.
+function avsSeverityCounts(vulnerabilities) {
+  return {
+    sev4: vulnerabilities.filter(v => v.severity === 'Sev4').length,
+    sev5: vulnerabilities.filter(v => v.severity === 'Sev5').length,
+  };
 }

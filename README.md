@@ -103,7 +103,7 @@ Browser JavaScript renders KPIs, charts, filters, tables, and export files
 6. The CSV loader reads each row, removes exact duplicates, and handles missing values.
 7. Each row becomes a `Vulnerability` object.
 8. Vulnerability age (`LastDetected` minus `FirstDetected`), SLA due dates, overdue status, and breach status are calculated from the record data and current date.
-9. The processed dataset is saved to `output/processed_vulnerabilities.csv`.
+9. The processed dataset is saved to `output/processed_vulnerabilities.csv`. Its `Severity` column holds the numeric 1-5 value from the input report (text labels in the input are converted: Critical 5, High 3, Medium 2, Low 1); the dashboard itself still shows the normalized Critical/High/Medium/Low labels.
 10. The service calculates aggregate statistics once and saves them to `output/dashboard_stats.json`.
 11. The template embeds the cached JSON in the page.
 12. Browser JavaScript renders the dashboard. Dropdowns and search filter the loaded processed records in memory.
@@ -392,14 +392,14 @@ It:
 - Defines the zone and asset rating constants and the Low / Medium / High thresholds.
 - Computes per-AppSpace scores from a record set, deduplicating by CVE (or vendor reference when no CVE exists).
 - Contains no DOM access, so both `avs.js` and the assistant reuse the same numbers.
-- Provides `computeAvsDrilldown(records, appId)` for the AVS List drill-down. It reuses the exact AVS inclusion rule (`avsQualifies`: Severity 4/5, age > 45 days) and uniqueness key (`avsDedupKey`: CVE, else vendor reference), so a drill-down total always equals that application's "Unique Vulnerabilities" count. Each unique vulnerability is grouped into one of `CoreOS`, `Java`, `Agents`, `ThirdParty`, `Others` (from the source `Category` column; unrecognised values fall into `Others`), with percentages rounded to one decimal using largest-remainder rounding so they always total 100%. Average age is the mean of the unique vulnerabilities' ages (oldest occurrence per vulnerability). Sev4/Sev5 counts come from the raw source `Severity` value, exposed on each record as `Severity Level`.
+- Provides `computeAvsDrilldown(records, appId)` for the AVS List drill-down. It reuses the exact AVS inclusion rule (`avsQualifies`: Severity 4/5, age > 45 days) and uniqueness key (`avsDedupKey`: CVE, else vendor reference), so a drill-down total always equals that application's "Unique Vulnerabilities" count. Each unique vulnerability is grouped into one of `CoreOS`, `Java`, `Agents`, `ThirdParty`, `Others` (from the source `Category` column; unrecognised values fall into `Others`), with percentages rounded to one decimal using largest-remainder rounding so they always total 100%. Average age is the mean of the unique vulnerabilities' ages (oldest occurrence per vulnerability). Sev4/Sev5 counts are unique-vulnerability counts: each unique vulnerability is reported once at its highest raw source severity (Sev5 wins over Sev4, from the `Severity Level` field), so Unique Sev4 + Unique Sev5 always equals the unique total.
 
 ### `static/js/avs.js`
 
 Renders the AVS section: KPI cards, charts, the AVS List table, and the application drill-down.
 
-- Clicking (or pressing Enter on) an AVS List row opens the drill-down directly below the table, titled with the AppSpace name: KPI cards (total unique Sev4/5 vulnerabilities, average age, Sev4 and Sev5 counts), a category pie chart, and a category breakdown table.
-- Clicking a pie slice, legend chip, or breakdown row shows the category detail table (Vulnerability Name, CVE Number, Severity, First Detected Date, Age, Solution). The Severity column shows `Sev4` / `Sev5` badges and, when a unique vulnerability groups several findings, `Sev4 Count : X` / `Sev5 Count : Y`.
+- Clicking (or pressing Enter on) an AVS List row opens the drill-down directly below the table, titled with the AppSpace name: KPI cards (total unique Sev4/5 vulnerabilities, average age, unique Sev4 and unique Sev5 counts), a category pie chart, and a category breakdown table.
+- Clicking a pie slice, legend chip, or breakdown row shows the category detail table (Vulnerability Name, CVE Number, Severity, First Detected Date, Age, Solution). The table has one row per unique vulnerability; the Severity column shows a single `Sev4` or `Sev5` badge, and the header summary shows the category's unique count with `Unique Sev4 Count : X` / `Unique Sev5 Count : Y`.
 - Clicking the selected row again, or Close, hides the drill-down. It also recomputes with the dashboard filters and hides itself if the selected application leaves the filtered scope.
 
 ### `static/js/assistant-engine.js`

@@ -188,10 +188,27 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
     return records, {"duplicates_skipped": duplicate_count, "invalid_dates": invalid_date_count, "columns": fieldnames, "source_format": "workbook" if _is_workbook(csv_path) else "csv"}
 
 
+SEVERITY_NUMBERS = {"Critical": "5", "High": "3", "Medium": "2", "Low": "1"}
+
+
+def processed_severity(record: Vulnerability) -> str:
+    """Numeric 1-5 severity for the processed CSV, taken from the input report.
+
+    The raw input value is used whenever it is already numeric (1-5), so
+    Severity 4 and 5 stay distinct. Text labels in the input (e.g. "High")
+    fall back to their numeric equivalent; unknown values are left blank.
+    """
+    raw = (record.severity_level or "").strip()
+    if raw in {"1", "2", "3", "4", "5"}:
+        return raw
+    return SEVERITY_NUMBERS.get(record.severity, "")
+
+
 def processed_row(record: Vulnerability) -> dict[str, object]:
     row = record.to_dict()
     raw = record.raw
     row.update({
+        "Severity": processed_severity(record),
         "AssetType": _value(raw, "AssetType"),
         "AppSpaceOwner": _value(raw, "AppSpaceOwner"),
         "QDS": _value(raw, "QDS"),

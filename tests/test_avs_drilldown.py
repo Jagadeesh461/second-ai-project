@@ -117,14 +117,16 @@ class AvsDrilldownCalculationTests(unittest.TestCase):
         result = drill([rec(cve="CVE-1", age=50), rec(cve="CVE-1", age=100), rec(cve="CVE-2", age=60)])
         self.assertEqual(result["averageAge"], 80)
 
-    def test_sev4_and_sev5_are_tracked_per_unique_vulnerability(self):
+    def test_severity_counts_are_unique_vulnerability_counts(self):
+        # CVE-1 has 1 Sev4 + 2 Sev5 findings -> ONE unique vulnerability, reported as Sev5.
         result = drill([rec(cve="CVE-1", sev="4"), rec(cve="CVE-1", sev="5"), rec(cve="CVE-1", sev="5"),
-                        rec(cve="CVE-2", sev="4")])
+                        rec(cve="CVE-2", sev="4"), rec(cve="CVE-2", sev="4"), rec(cve="CVE-3", sev="5")])
         vulns = {v["cve"]: v for v in result["vulnerabilities"]}
-        self.assertEqual((vulns["CVE-1"]["sev4"], vulns["CVE-1"]["sev5"]), (1, 2))
-        self.assertEqual(vulns["CVE-1"]["severityLabel"], "Sev4 + Sev5")
-        self.assertEqual(vulns["CVE-2"]["severityLabel"], "Sev4")
-        self.assertEqual((result["sev4"], result["sev5"]), (2, 2))
+        self.assertEqual(vulns["CVE-1"]["severity"], "Sev5")
+        self.assertEqual(vulns["CVE-2"]["severity"], "Sev4")
+        self.assertEqual(vulns["CVE-3"]["severity"], "Sev5")
+        self.assertEqual((result["sev4"], result["sev5"]), (1, 2))
+        self.assertEqual(result["sev4"] + result["sev5"], result["total"])
 
     def test_detail_columns_are_mapped_from_source(self):
         result = drill([
@@ -201,7 +203,9 @@ function $(id) { return document.getElementById(id); }
 class AvsDrilldownDomTests(unittest.TestCase):
     RECORDS = [
         rec(cve="J1", category="Java", sev="4"), rec(cve="J1", category="Java", sev="5"),
-        rec(cve="C1", category="CoreOS", sev="5"), rec(cve="C2", category="CoreOS", sev="4", age=30),
+        rec(cve="J2", category="Java", sev="4"), rec(cve="J2", category="Java", sev="4"),
+        rec(cve="C1", category="CoreOS", sev="5"), rec(cve="C3", category="CoreOS", sev="4"),
+        rec(cve="C2", category="CoreOS", sev="4", age=30),
         rec(app="AS-2", cve="X1", category="Java"),
     ]
 
@@ -238,12 +242,22 @@ class AvsDrilldownDomTests(unittest.TestCase):
             "  summary: document.getElementById('avsCategoryDetailSummary').textContent });"
         ))
         self.assertFalse(result["hidden"])
+        self.assertEqual(result["rows"].count("<tr>"), 2)  # one row per unique vulnerability
         self.assertIn("J1", result["rows"])
+        self.assertIn("J2", result["rows"])
         self.assertNotIn("C1", result["rows"])
         self.assertNotIn("X1", result["rows"])
-        self.assertIn("Sev4 Count : 1", result["rows"])
-        self.assertIn("Sev5 Count : 1", result["rows"])
-        self.assertIn("Sev4 Count : 1 · Sev5 Count : 1", result["summary"])
+        self.assertNotIn("Count", result["rows"])
+        self.assertIn(">Sev5<", result["rows"])
+        self.assertIn(">Sev4<", result["rows"])
+        self.assertIn("2 unique Sev4/5 vulnerabilities", result["summary"])
+        self.assertIn("Unique Sev4 Count : 1 · Unique Sev5 Count : 1", result["summary"])
+
+    def test_kpis_show_unique_severity_counts(self):
+        kpis = self.run_dom("renderAvs(CONTEXT.records); avsSelectApp('AS-1'); document.getElementById('avsDrilldownKpis').innerHTML;")
+        # 4 unique (J1=Sev5, J2=Sev4, C1=Sev5, C3=Sev4); C2 excluded by age.
+        self.assertRegex(kpis, r"Unique Sev4 Count.*?kpi-value\">2<")
+        self.assertRegex(kpis, r"Unique Sev5 Count.*?kpi-value\">2<")
 
     def test_pie_hit_testing_maps_click_to_slice(self):
         result = json.loads(self.run_dom(
@@ -319,6 +333,18 @@ class AvsDrilldownSourceFieldTests(unittest.TestCase):
 
     def test_processed_output_columns_unchanged(self):
         self.assertNotIn("Severity Level", csv_loader.PROCESSED_COLUMNS)
+
+    def test_processed_csv_severity_is_numeric_from_input(self):
+        rows = [{"Severity": str(level), "QID": str(level)} for level in (5, 4, 3, 2, 1)]
+        rows += [{"Severity": "High", "QID": "6"}, {"Severity": "Critical", "QID": "7"}, {"Severity": "bogus", "QID": "8"}]
+        records, _ = csv_loader.load_vulnerabilities(self.write_csv(rows), today=date(2026, 6, 1))
+        output = Path(self.temp.name) / "processed.csv"
+        csv_loader.write_processed_csv(records, output)
+        with output.open("r", encoding="utf-8", newline="") as handle:
+            severities = [row["Severity"] for row in csv.DictReader(handle)]
+        self.assertEqual(severities, ["5", "4", "3", "2", "1", "3", "5", ""])
+        # The dashboard/API record keeps the normalized label.
+        self.assertEqual(records[0].to_dict()["Severity"], "Critical")
 
     def test_cache_without_severity_level_is_stale(self):
         self.assertTrue(service._cache_is_stale({"records": [{"Severity": "Critical"}]}))
