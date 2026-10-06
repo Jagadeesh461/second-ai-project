@@ -163,6 +163,8 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             qid=_value(cleaned, "QID") or "Unknown",
             vulnerability_name=_value(cleaned, "VulnerabilityName") or "Unknown",
             severity=normalize_severity(_value(cleaned, "Severity")),
+            severity_level=_value(cleaned, "Severity"),
+            solution=_value(cleaned, "Solution"),
             cvss_base_score=parse_number(_value(cleaned, "CVSS3Temporal")) or parse_number(_value(cleaned, "CVSS2Temporal")),
             asset_risk_score=parse_number(_value(cleaned, "AssetRiskScore")),
             cve=_value(cleaned, "CVE") or "N/A",
@@ -186,10 +188,27 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
     return records, {"duplicates_skipped": duplicate_count, "invalid_dates": invalid_date_count, "columns": fieldnames, "source_format": "workbook" if _is_workbook(csv_path) else "csv"}
 
 
+SEVERITY_NUMBERS = {"Critical": "5", "High": "3", "Medium": "2", "Low": "1"}
+
+
+def processed_severity(record: Vulnerability) -> str:
+    """Numeric 1-5 severity for the processed CSV, taken from the input report.
+
+    The raw input value is used whenever it is already numeric (1-5), so
+    Severity 4 and 5 stay distinct. Text labels in the input (e.g. "High")
+    fall back to their numeric equivalent; unknown values are left blank.
+    """
+    raw = (record.severity_level or "").strip()
+    if raw in {"1", "2", "3", "4", "5"}:
+        return raw
+    return SEVERITY_NUMBERS.get(record.severity, "")
+
+
 def processed_row(record: Vulnerability) -> dict[str, object]:
     row = record.to_dict()
     raw = record.raw
     row.update({
+        "Severity": processed_severity(record),
         "AssetType": _value(raw, "AssetType"),
         "AppSpaceOwner": _value(raw, "AppSpaceOwner"),
         "QDS": _value(raw, "QDS"),
