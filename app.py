@@ -103,7 +103,8 @@ def export_filtered_report():
     csv_text = payload.get("csv", "")
     if not isinstance(csv_text, str) or not csv_text.strip():
         abort(400, description="No CSV content provided")
-    filename = f"filtered_report_{_timestamp()}.csv"
+    requested_name = secure_filename(payload.get("filename") or "")
+    filename = requested_name if requested_name.lower().endswith(".csv") else f"filtered_report_{_timestamp()}.csv"
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     (ARCHIVE_DIR / filename).write_text(csv_text, encoding="utf-8")
     return Response(

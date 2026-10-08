@@ -157,6 +157,25 @@ class AvsDrilldownCalculationTests(unittest.TestCase):
         self.assertEqual(counts["Java"], 1)
         self.assertEqual(counts["CoreOS"], 0)
 
+    def test_export_records_for_category_filters_by_app_and_category(self):
+        records = [rec(cve="J1", category="Java"), rec(cve="O1", category="CoreOS"),
+                   rec(app="AS-2", cve="J2", category="Java"), rec(cve="J3", category="Java", age=20),
+                   rec(cve="J4", category="Java", sev="3")]
+        rows = json.loads(run_js(
+            "JSON.stringify(avsExportRecordsForCategory(CONTEXT.records, 'AS-1', 'Java'));",
+            files=CORE_FILES, context={"records": records},
+        ))
+        self.assertEqual([r["CVE"] for r in rows], ["J1"])
+
+    def test_export_records_for_total_includes_every_category(self):
+        records = [rec(cve="J1", category="Java"), rec(cve="O1", category="CoreOS"),
+                   rec(app="AS-2", cve="J2", category="Java")]
+        rows = json.loads(run_js(
+            "JSON.stringify(avsExportRecordsForCategory(CONTEXT.records, 'AS-1', 'Total'));",
+            files=CORE_FILES, context={"records": records},
+        ))
+        self.assertEqual(sorted(r["CVE"] for r in rows), ["J1", "O1"])
+
     def test_existing_avs_metrics_unchanged(self):
         apps = json.loads(run_js(
             "JSON.stringify(computeAvsMetrics(CONTEXT.records));", files=CORE_FILES,
