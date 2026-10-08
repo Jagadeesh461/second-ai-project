@@ -14,6 +14,10 @@ let avsActiveLevel = 'all';
 let avsSelectedAppId = null;
 let avsSelectedCategory = null;
 let avsLastRecords = [];
+// Last apps array from computeAvsMetrics (as used to render the AVS KPIs,
+// table, and charts) so other consumers, such as the PDF report, can reuse
+// it without recomputing AVS scores.
+let avsLastApps = [];
 let avsCurrentDrilldown = null;
 let avsPieGeometry = null;
 const AVS_CATEGORY_COLORS = { CoreOS: '#f2661e', Java: '#0f1b2d', Agents: '#5b6b8f', ThirdParty: '#2f9d6c', Others: '#e8b23c' };
@@ -70,6 +74,7 @@ function renderAvs(records) {
 
   avsTable.update(apps);
   avsLastRecords = records;
+  avsLastApps = apps;
   avsRefreshDrilldown(apps);
 }
 

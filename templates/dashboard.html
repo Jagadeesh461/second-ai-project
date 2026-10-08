@@ -61,7 +61,7 @@
       <article class="panel chart-panel"><div class="panel-head"><div><h3>Environment distribution</h3><p>Findings by environment</p></div><span class="panel-mark">ENV</span></div><div class="donut-wrap"><canvas id="envDistributionChart"></canvas><div id="envDonutTotal" class="donut-total"></div></div><div id="envDistributionLegend" class="legend"></div></article>
       <article class="panel chart-panel"><div class="panel-head"><div><h3>Remediation action distribution</h3><p>Findings by remediation stage</p></div><span class="panel-mark">REMEDIATION</span></div><div class="donut-wrap"><canvas id="remediationChart"></canvas><div id="remediationDonutTotal" class="donut-total"></div></div><div id="remediationLegend" class="legend"></div></article>
     </section>
-    <section class="section-heading"><div><p class="eyebrow">02 / APPLICATION SCORE</p><h2>Application Vulnerability Score (AVS)</h2></div></section>
+    <section class="section-heading"><div><p class="eyebrow">02 / APPLICATION SCORE</p><h2>Application Vulnerability Score (AVS)</h2></div><button id="generateAvsReport" type="button" class="button button-primary">Generate AVS Report</button></section>
     <section id="avsKpis" class="kpi-grid"></section>
     <section class="chart-grid avs-chart-grid">
       <article class="panel chart-panel"><div class="panel-head"><div><h3>AVS distribution</h3><p>Applications by AVS level</p></div><span class="panel-mark">AVS</span></div><div class="donut-wrap"><canvas id="avsDistributionChart"></canvas><div id="avsDonutTotal" class="donut-total"></div></div><div id="avsDistributionLegend" class="legend"></div></article>
@@ -116,6 +116,6 @@
     </section>
   </div>
   <script>window.DASHBOARD_DATA = {{ dashboard_json|safe }}; window.LOAD_ERROR = {{ load_error|tojson }};</script>
-  <script src="{{ url_for('static', filename='js/charts.js') }}"></script><script src="{{ url_for('static', filename='js/filters.js') }}"></script><script src="{{ url_for('static', filename='js/table-controller.js') }}"></script><script src="{{ url_for('static', filename='js/avs-core.js') }}"></script><script src="{{ url_for('static', filename='js/avs.js') }}"></script><script src="{{ url_for('static', filename='js/assistant-engine.js') }}"></script><script src="{{ url_for('static', filename='js/assistant.js') }}"></script><script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script><script src="{{ url_for('static', filename='js/filters.js') }}"></script><script src="{{ url_for('static', filename='js/table-controller.js') }}"></script><script src="{{ url_for('static', filename='js/avs-core.js') }}"></script><script src="{{ url_for('static', filename='js/avs.js') }}"></script><script src="{{ url_for('static', filename='js/assistant-engine.js') }}"></script><script src="{{ url_for('static', filename='js/assistant.js') }}"></script><script src="{{ url_for('static', filename='js/dashboard.js') }}"></script><script src="{{ url_for('static', filename='js/vendor/jspdf.umd.min.js') }}"></script><script src="{{ url_for('static', filename='js/avs-report.js') }}"></script>
 </body>
 </html>

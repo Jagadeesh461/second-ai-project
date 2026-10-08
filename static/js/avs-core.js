@@ -36,6 +36,7 @@ function computeAvsMetrics(records) {
       byApp[appId] = {
         name: r.AppSpaceName || 'Unknown',
         team: r.AppSpaceTeam || 'Unknown',
+        owner: r.AppSpaceOwner || 'Unknown',
         assetType: r['AVS Asset Type'] || 'Other',
         zone: r['AVS Zone'] || 'Internal',
         keys: new Set(),
@@ -51,7 +52,7 @@ function computeAvsMetrics(records) {
     const zoneRating = AVS_ZONE_RATINGS[info.zone] ?? AVS_ZONE_RATINGS.Internal;
     const assetRating = AVS_ASSET_RATINGS[info.assetType] ?? AVS_ASSET_RATINGS.Other;
     const score = uniqueCount * zoneRating * assetRating;
-    return { appId, name: info.name, team: info.team, assetType: info.assetType, zone: info.zone, uniqueCount, score, level: avsClassify(score) };
+    return { appId, name: info.name, team: info.team, owner: info.owner, assetType: info.assetType, zone: info.zone, uniqueCount, score, level: avsClassify(score) };
   });
 }
 
@@ -180,4 +181,15 @@ function avsSeverityCounts(vulnerabilities) {
     sev4: vulnerabilities.filter(v => v.severity === 'Sev4').length,
     sev5: vulnerabilities.filter(v => v.severity === 'Sev5').length,
   };
+}
+
+// Raw (non-deduped) source records for one application, optionally narrowed
+// to a single drill-down category ('Total'/falsy keeps every category). Uses
+// the exact same avsQualifies/avsCategory rules as computeAvsDrilldown, so an
+// export always matches the rows behind that category's count/percentage.
+// Powers the AVS report's per-category "Export CSV" links.
+function avsExportRecordsForCategory(records, appId, category) {
+  return records.filter(r => (r.AppSpaceId || 'Unknown') === appId
+    && avsQualifies(r)
+    && (!category || category === 'Total' || avsCategory(r['Type Category']) === category));
 }
