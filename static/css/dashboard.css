@@ -484,7 +484,7 @@ body {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-5);
 }
@@ -610,6 +610,11 @@ body {
 
 .hotspot-panel {
   min-height: 320px;
+}
+
+.hotspot-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: none;
 }
 
 .avs-chart-grid {
@@ -1492,6 +1497,7 @@ footer {
   .avs-chart-grid,
   .avs-drilldown-grid,
   .exposure-chart-grid,
+  .hotspot-grid,
   .insight-grid {
     grid-template-columns: 1fr;
   }

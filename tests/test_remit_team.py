@@ -7,61 +7,61 @@ from pathlib import Path
 
 import services.csv_loader as csv_loader
 import services.vulnerability_service as service
-from utils.dependant_team import DEFAULT_DEPENDANT_TEAM, load_mapping, resolve_dependant_team
+from utils.remit_team import DEFAULT_REMIT_TEAM, load_mapping, resolve_remit_team
 
 
-class DependantTeamMappingTests(unittest.TestCase):
+class RemitTeamMappingTests(unittest.TestCase):
     def setUp(self):
         self.mapping = load_mapping(refresh=True)
 
     def test_mapping_file_exists_in_static(self):
-        self.assertTrue((Path(__file__).resolve().parents[1] / "static" / "dependant_team_mapping.json").exists())
+        self.assertTrue((Path(__file__).resolve().parents[1] / "static" / "remit_team_mapping.json").exists())
 
     def test_mapping_keys_are_lower_cased(self):
         self.assertTrue(all(keyword == keyword.lower() for keyword in self.mapping))
 
     def test_known_path_keyword_matches(self):
-        self.assertEqual(resolve_dependant_team("/apps/home/config.xml"), "Change/ITO")
+        self.assertEqual(resolve_remit_team("/apps/home/config.xml"), "Change/ITO")
 
     def test_splunk_detection_maps_to_app_health(self):
-        self.assertEqual(resolve_dependant_team("Splunk Universal Forwarder detected"), "AppHealth")
+        self.assertEqual(resolve_remit_team("Splunk Universal Forwarder detected"), "AppHealth")
 
     def test_windows_server_detection_maps_to_wintel(self):
-        self.assertEqual(resolve_dependant_team("Windows Server 2019 missing patch"), "Wintel")
+        self.assertEqual(resolve_remit_team("Windows Server 2019 missing patch"), "Wintel")
 
     def test_microsoft_exchange_detection_maps_to_wintel(self):
-        self.assertEqual(resolve_dependant_team("Microsoft Exchange cumulative update"), "Wintel")
+        self.assertEqual(resolve_remit_team("Microsoft Exchange cumulative update"), "Wintel")
 
     def test_matching_is_case_insensitive(self):
         for value in ("SPLUNK", "splunk", "SpLuNk"):
-            self.assertEqual(resolve_dependant_team(f"{value} agent"), "AppHealth")
+            self.assertEqual(resolve_remit_team(f"{value} agent"), "AppHealth")
 
     def test_uppercase_path_keyword_matches(self):
-        self.assertEqual(resolve_dependant_team("/APPS/GRAFANA/bin"), "Grafana")
+        self.assertEqual(resolve_remit_team("/APPS/GRAFANA/bin"), "Grafana")
 
     def test_longest_keyword_wins_when_multiple_match(self):
-        self.assertEqual(resolve_dependant_team("/apps/ctm/backup/run.sh"), "Control-M")
+        self.assertEqual(resolve_remit_team("/apps/ctm/backup/run.sh"), "Control-M")
 
     def test_multiple_distinct_keywords_prefer_most_specific(self):
-        self.assertEqual(resolve_dependant_team("/usr/local/dynatrace/agent"), "Midrange")
+        self.assertEqual(resolve_remit_team("/usr/local/dynatrace/agent"), "Midrange")
 
     def test_unmatched_detection_defaults_to_other(self):
-        self.assertEqual(resolve_dependant_team("Some unrelated finding"), DEFAULT_DEPENDANT_TEAM)
+        self.assertEqual(resolve_remit_team("Some unrelated finding"), DEFAULT_REMIT_TEAM)
 
     def test_blank_detection_defaults_to_other(self):
-        self.assertEqual(resolve_dependant_team(""), DEFAULT_DEPENDANT_TEAM)
-        self.assertEqual(resolve_dependant_team("   "), DEFAULT_DEPENDANT_TEAM)
-        self.assertEqual(resolve_dependant_team(None), DEFAULT_DEPENDANT_TEAM)
+        self.assertEqual(resolve_remit_team(""), DEFAULT_REMIT_TEAM)
+        self.assertEqual(resolve_remit_team("   "), DEFAULT_REMIT_TEAM)
+        self.assertEqual(resolve_remit_team(None), DEFAULT_REMIT_TEAM)
 
     def test_custom_mapping_is_honoured(self):
-        self.assertEqual(resolve_dependant_team("/opt/custom/app", {"/opt/custom": "Custom Team"}), "Custom Team")
+        self.assertEqual(resolve_remit_team("/opt/custom/app", {"/opt/custom": "Custom Team"}), "Custom Team")
 
     def test_missing_mapping_file_yields_empty_rules(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.assertEqual(load_mapping(Path(temp_dir) / "absent.json"), {})
 
 
-class AgeAndDependantTeamLoaderTests(unittest.TestCase):
+class AgeAndRemitTeamLoaderTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
@@ -137,7 +137,7 @@ class AgeAndDependantTeamLoaderTests(unittest.TestCase):
         record = self.load([{"FirstDetected": "2026-01-01", "LastDetected": "2026-01-31"}])[0]
         self.assertEqual(record.aging_bucket, "8-30 Days")
 
-    def test_dependant_team_is_resolved_from_detection(self):
+    def test_remit_team_is_resolved_from_detection(self):
         records = self.load(
             [
                 {"Detection": "/apps/home/app.conf"},
@@ -146,22 +146,22 @@ class AgeAndDependantTeamLoaderTests(unittest.TestCase):
                 {"Detection": "nothing relevant", "QID": "4"},
             ]
         )
-        self.assertEqual([record.dependant_team for record in records], ["Change/ITO", "AppHealth", "Wintel", "Other"])
+        self.assertEqual([record.remit_team for record in records], ["Change/ITO", "AppHealth", "Wintel", "Other"])
 
-    def test_dependant_team_defaults_to_other_without_detection_column_value(self):
-        self.assertEqual(self.load([{"Detection": ""}])[0].dependant_team, "Other")
+    def test_remit_team_defaults_to_other_without_detection_column_value(self):
+        self.assertEqual(self.load([{"Detection": ""}])[0].remit_team, "Other")
 
-    def test_processed_output_contains_dependant_team_column(self):
-        self.assertIn("DependantTeam", csv_loader.PROCESSED_COLUMNS)
+    def test_processed_output_contains_remit_team_column(self):
+        self.assertIn("RemitTeam", csv_loader.PROCESSED_COLUMNS)
         record = self.load([{"Detection": "/apps/grafana/bin"}])[0]
-        self.assertEqual(csv_loader.processed_row(record)["DependantTeam"], "Grafana")
+        self.assertEqual(csv_loader.processed_row(record)["RemitTeam"], "Grafana")
 
-    def test_record_dict_exposes_dependant_team(self):
+    def test_record_dict_exposes_remit_team(self):
         record = self.load([{"Detection": "vmware tools"}])[0]
-        self.assertEqual(record.to_dict()["DependantTeam"], "Wintel")
+        self.assertEqual(record.to_dict()["RemitTeam"], "Wintel")
 
 
-class DependantTeamDashboardTests(unittest.TestCase):
+class RemitTeamDashboardTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
@@ -201,27 +201,27 @@ class DependantTeamDashboardTests(unittest.TestCase):
         records, metadata = csv_loader.load_vulnerabilities(path, today=date(2026, 6, 1))
         return service.build_dashboard(records, metadata, today=date(2026, 6, 1))
 
-    def test_dashboard_exposes_dependant_team_filter_values(self):
+    def test_dashboard_exposes_remit_team_filter_values(self):
         dashboard = self.build(["/apps/home", "splunk agent", "unmapped finding"])
-        self.assertEqual(dashboard["filters"]["dependant_team"], ["AppHealth", "Change/ITO", "Other"])
+        self.assertEqual(dashboard["filters"]["remit_team"], ["AppHealth", "Change/ITO", "Other"])
 
     def test_dashboard_no_longer_exposes_vendor_filter(self):
         dashboard = self.build(["/apps/home"])
         self.assertNotIn("vendor", dashboard["filters"])
         self.assertNotIn("vendor", dashboard["charts"])
 
-    def test_dashboard_counts_records_per_dependant_team(self):
+    def test_dashboard_counts_records_per_remit_team(self):
         dashboard = self.build(["/apps/home", "/apps/java", "splunk agent"])
-        self.assertEqual(dashboard["charts"]["dependant_team"], {"Change/ITO": 2, "AppHealth": 1})
+        self.assertEqual(dashboard["charts"]["remit_team"], {"Change/ITO": 2, "AppHealth": 1})
 
-    def test_dashboard_records_carry_dependant_team(self):
+    def test_dashboard_records_carry_remit_team(self):
         dashboard = self.build(["windows server 2019"])
-        self.assertEqual(dashboard["records"][0]["DependantTeam"], "Wintel")
+        self.assertEqual(dashboard["records"][0]["RemitTeam"], "Wintel")
 
 
-class DependantTeamMappingFileTests(unittest.TestCase):
+class RemitTeamMappingFileTests(unittest.TestCase):
     def test_mapping_file_is_valid_json_object_of_strings(self):
-        path = Path(__file__).resolve().parents[1] / "static" / "dependant_team_mapping.json"
+        path = Path(__file__).resolve().parents[1] / "static" / "remit_team_mapping.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertIsInstance(payload, dict)
         self.assertTrue(payload)

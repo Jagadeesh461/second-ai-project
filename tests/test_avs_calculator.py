@@ -37,11 +37,11 @@ class RatingLookupTests(unittest.TestCase):
         self.assertEqual(avs_calculator.zone_rating("Unmapped Zone"), avs_calculator.EXPOSURE_ZONE_RATINGS["Internal"])
         self.assertEqual(avs_calculator.zone_rating(""), avs_calculator.EXPOSURE_ZONE_RATINGS["Internal"])
 
-    def test_asset_type_rating_known_and_default(self):
-        self.assertEqual(avs_calculator.asset_type_rating("Essential"), 2)
-        self.assertEqual(avs_calculator.asset_type_rating("Fundamental"), 2)
-        self.assertEqual(avs_calculator.asset_type_rating("Other"), 1)
-        self.assertEqual(avs_calculator.asset_type_rating("Unmapped"), avs_calculator.ASSET_TYPE_RATINGS["Other"])
+    def test_fundamental_classification_rating_known_and_default(self):
+        self.assertEqual(avs_calculator.fundamental_classification_rating("Essential"), 2)
+        self.assertEqual(avs_calculator.fundamental_classification_rating("Fundamental"), 2)
+        self.assertEqual(avs_calculator.fundamental_classification_rating("Other"), 1)
+        self.assertEqual(avs_calculator.fundamental_classification_rating("Unmapped"), avs_calculator.FUNDAMENTAL_CLASSIFICATION_RATINGS["Other"])
 
 
 class AvsCalculatorTestCase(unittest.TestCase):
@@ -89,9 +89,9 @@ class ComputeAvsTests(AvsCalculatorTestCase):
         # CVE-2026-0001 (1) + Acme fallback (1) = 2 unique keys; the fully-blank row never qualifies.
         self.assertEqual(result.loc["APP-1", "AVSUniqueVulnCount"], 2)
 
-    def test_score_uses_zone_and_asset_type_from_static_mapping(self):
+    def test_score_uses_zone_and_fundamental_classification_from_static_mapping(self):
         self.set_mapping([
-            {"AppSpaceId": "APP-1", "AppSpaceName": "Payments", "AppSpaceTeam": "Platform", "AssetType": "Essential", "Zone": "External"},
+            {"AppSpaceId": "APP-1", "AppSpaceName": "Payments", "AppSpaceTeam": "Platform", "FundamentalClassification": "Essential", "Zone": "External"},
         ])
         records = [make_record("APP-1", "Payments", "Platform", cve="CVE-A"), make_record("APP-1", "Payments", "Platform", cve="CVE-B")]
         result = avs_calculator.compute_avs(records)
@@ -105,7 +105,7 @@ class ComputeAvsTests(AvsCalculatorTestCase):
         records = [make_record("APP-UNMAPPED", "Unknown App", "Unknown Team")]
         result = avs_calculator.compute_avs(records)
         row = result.loc["APP-UNMAPPED"]
-        self.assertEqual(row["AssetType"], avs_calculator.DEFAULT_ASSET_TYPE)
+        self.assertEqual(row["FundamentalClassification"], avs_calculator.DEFAULT_FUNDAMENTAL_CLASSIFICATION)
         self.assertEqual(row["Zone"], avs_calculator.DEFAULT_ZONE)
 
     def test_empty_records_returns_empty_frame(self):
@@ -123,8 +123,8 @@ class AttachAvsToRecordsTests(AvsCalculatorTestCase):
         for record in records:
             self.assertEqual(record.avs_unique_vuln_count, 2)
             self.assertEqual(record.avs_level, "Low")
-            self.assertEqual(record.avs_zone, avs_calculator.DEFAULT_ZONE)
-            self.assertEqual(record.avs_asset_type, avs_calculator.DEFAULT_ASSET_TYPE)
+            self.assertEqual(record.zone, avs_calculator.DEFAULT_ZONE)
+            self.assertEqual(record.fundamental_classification, avs_calculator.DEFAULT_FUNDAMENTAL_CLASSIFICATION)
 
     def test_records_with_no_qualifying_findings_get_zero_score(self):
         records = [make_record("APP-2", "Billing", "Ops", severity="Low", age_days=1)]
@@ -141,7 +141,7 @@ class BuildAvsSummaryTests(AvsCalculatorTestCase):
             + [make_record("APP-HIGH", "High App", "Team B", cve=f"CVE-HIGH-{i}") for i in range(101)]
         )
         self.set_mapping([
-            {"AppSpaceId": "APP-HIGH", "AppSpaceName": "High App", "AppSpaceTeam": "Team B", "AssetType": "Essential", "Zone": "External"},
+            {"AppSpaceId": "APP-HIGH", "AppSpaceName": "High App", "AppSpaceTeam": "Team B", "FundamentalClassification": "Essential", "Zone": "External"},
         ])
 
         per_app = avs_calculator.compute_avs(records)

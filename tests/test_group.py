@@ -26,11 +26,11 @@ class GroupMappingTests(unittest.TestCase):
         for value in ("change/ito", "CHANGE/ITO", "Change/Ito"):
             self.assertEqual(resolve_group(value), "Suncorp Bank")
 
-    def test_other_dependant_teams_default_to_suncorp_group(self):
+    def test_other_remit_teams_default_to_suncorp_group(self):
         for team in ("Wintel", "Midrange", "Dynatrace", "Control-M", "AppHealth", "Other"):
             self.assertEqual(resolve_group(team), DEFAULT_GROUP)
 
-    def test_blank_dependant_team_defaults_to_suncorp_group(self):
+    def test_blank_remit_team_defaults_to_suncorp_group(self):
         self.assertEqual(resolve_group(""), DEFAULT_GROUP)
         self.assertEqual(resolve_group("   "), DEFAULT_GROUP)
         self.assertEqual(resolve_group(None), DEFAULT_GROUP)
@@ -87,7 +87,7 @@ class GroupLoaderTests(unittest.TestCase):
         records, _ = csv_loader.load_vulnerabilities(self.write_csv(rows), today=today)
         return records
 
-    def test_group_is_resolved_from_dependant_team(self):
+    def test_group_is_resolved_from_remit_team(self):
         records = self.load(
             [
                 {"Detection": "/apps/home/app.conf"},  # Change/ITO -> Suncorp Bank

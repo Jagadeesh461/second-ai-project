@@ -329,7 +329,8 @@ function avsReportDrawDistributionSection(doc, apps, margin, contentWidth, y) {
 
 // "Top Applications by AVS Score": the enlarged horizontal bar chart (now
 // using the space freed up by removing the "AVS Score by Team" chart) plus a
-// readable Application Name / AVS Score / AVS Level table underneath.
+// readable Application Name / AVS Score / AVS Level / FundamentalClassification
+// / Zone table underneath.
 function avsReportDrawTopAppsSection(doc, apps, margin, contentWidth, y) {
   const top = apps.slice(0, 10);
   const chartH = 62;
@@ -337,11 +338,13 @@ function avsReportDrawTopAppsSection(doc, apps, margin, contentWidth, y) {
   y += Math.max(drawnH, 40) + 6;
 
   const columns = [
-    { key: 'name', label: 'Application Name', width: contentWidth * 0.5 },
-    { key: 'score', label: 'AVS Score', width: contentWidth * 0.22 },
-    { key: 'level', label: 'AVS Level', width: contentWidth * 0.28 },
+    { key: 'name', label: 'Application Name', width: contentWidth * 0.34 },
+    { key: 'score', label: 'AVS Score', width: contentWidth * 0.14 },
+    { key: 'level', label: 'AVS Level', width: contentWidth * 0.14 },
+    { key: 'classification', label: 'FundamentalClassification', width: contentWidth * 0.22 },
+    { key: 'zone', label: 'Zone', width: contentWidth * 0.16 },
   ];
-  const rows = top.map(a => ({ name: a.name, score: a.score.toFixed(1), level: a.level }));
+  const rows = top.map(a => ({ name: a.name, score: a.score.toFixed(1), level: a.level, classification: a.fundamentalClassification || 'Other', zone: a.zone || 'Internal' }));
   return avsReportDrawTable(doc, { startX: margin.left, startY: y, columns, rows, margin });
 }
 
@@ -472,6 +475,8 @@ function avsReportBuildApplicationPage(doc, { app, drilldown, exportLinks, margi
   doc.setFontSize(9.5);
   doc.setTextColor(mr, mg, mb);
   doc.text(`App Owner: ${app.owner || 'Unknown'}`, margin.left, y);
+  y += 5;
+  doc.text(`FundamentalClassification: ${app.fundamentalClassification || 'Other'}   |   Zone: ${app.zone || 'Internal'}   |   Exploitable Unique Vulns: ${Number(drilldown.exploitable || 0).toLocaleString()}`, margin.left, y);
   y += 7;
 
   const levelColor = app.level === 'High' ? AVS_REPORT_COLORS.high : app.level === 'Medium' ? AVS_REPORT_COLORS.medium : AVS_REPORT_COLORS.low;

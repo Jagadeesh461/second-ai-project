@@ -70,7 +70,7 @@ function badge(value) { return String(value); }
 
 def card(level):
     return {
-        'name': f'App-{level}', 'team': 'Team', 'assetType': 'API',
+        'name': f'App-{level}', 'team': 'Team', 'fundamentalClassification': 'API',
         'zone': 'DMZ', 'level': level, 'score': 10, 'uniqueCount': 2,
     }
 
