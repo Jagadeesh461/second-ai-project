@@ -8,7 +8,7 @@ they must not re-derive AVS scores or classifications themselves.
 Formula
 -------
 AVS = (unique Severity 4/5 vulnerabilities older than 45 days)
-      x Exposure Zone Rating x Asset Type Rating
+      x Exposure Zone Rating x FundamentalClassification Rating
 
 Classification
 ---------------
@@ -38,21 +38,27 @@ from typing import Iterable
 
 import pandas as pd
 
+from utils.vuln_identity import record_unique_vuln_name
+
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 STATIC_MAPPING_PATH = STATIC_DIR / "static_mapping.csv"
 
-STATIC_MAPPING_COLUMNS = ("AppSpaceId", "AppSpaceName", "AppSpaceTeam", "AssetType", "Zone")
+STATIC_MAPPING_COLUMNS = ("AppSpaceId", "AppSpaceName", "AppSpaceTeam", "FundamentalClassification", "Zone")
+
+# Older AVS List files used "AssetType" for the FundamentalClassification column;
+# they are still accepted and read as FundamentalClassification.
+LEGACY_CLASSIFICATION_COLUMN = "AssetType"
 
 # Values used when an AppSpaceId has no entry in static_mapping.csv.
-DEFAULT_ASSET_TYPE = "Other"
+DEFAULT_FUNDAMENTAL_CLASSIFICATION = "Other"
 DEFAULT_ZONE = "Internal"
 
 # Sentinel values treated as "no CVE supplied" when picking the dedup key.
 BLANK_VALUES = {"", "N/A", "Unknown"}
 
 EXPOSURE_ZONE_RATINGS = {"External": 5, "Internal": 1, "Internal & Protected": 0.2}
-ASSET_TYPE_RATINGS = {"Essential": 2, "Fundamental": 2, "Other": 1}
+FUNDAMENTAL_CLASSIFICATION_RATINGS = {"Essential": 2, "Fundamental": 2, "Other": 1}
 
 AGE_THRESHOLD_DAYS = 45
 QUALIFYING_SEVERITIES = ("Critical",)  # normalized bucket that covers raw Severity 4 and 5
@@ -74,15 +80,15 @@ def zone_rating(zone: str) -> float:
     return EXPOSURE_ZONE_RATINGS.get((zone or "").strip(), EXPOSURE_ZONE_RATINGS[DEFAULT_ZONE])
 
 
-def asset_type_rating(asset_type: str) -> float:
-    return ASSET_TYPE_RATINGS.get((asset_type or "").strip(), ASSET_TYPE_RATINGS[DEFAULT_ASSET_TYPE])
+def fundamental_classification_rating(classification: str) -> float:
+    return FUNDAMENTAL_CLASSIFICATION_RATINGS.get((classification or "").strip(), FUNDAMENTAL_CLASSIFICATION_RATINGS[DEFAULT_FUNDAMENTAL_CLASSIFICATION])
 
 
 def ensure_static_mapping(records: Iterable, path: Path = STATIC_MAPPING_PATH) -> Path:
     """Auto-generate static_mapping.csv from source records on first run.
 
     Populates AppSpaceId, AppSpaceName, and AppSpaceTeam from the vulnerability
-    data, with AssetType defaulted to "Other" and Zone defaulted to "Internal".
+    data, with FundamentalClassification defaulted to "Other" and Zone defaulted to "Internal".
     An existing file is never overwritten, so manual edits are preserved.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +103,7 @@ def ensure_static_mapping(records: Iterable, path: Path = STATIC_MAPPING_PATH) -
             "AppSpaceId": app_id,
             "AppSpaceName": getattr(record, "app_space_name", "Unknown") or "Unknown",
             "AppSpaceTeam": getattr(record, "app_space_team", "Unknown") or "Unknown",
-            "AssetType": DEFAULT_ASSET_TYPE,
+            "FundamentalClassification": DEFAULT_FUNDAMENTAL_CLASSIFICATION,
             "Zone": DEFAULT_ZONE,
         }
     frame = pd.DataFrame(apps.values(), columns=STATIC_MAPPING_COLUMNS)
@@ -109,25 +115,31 @@ def validate_mapping_csv(path: Path) -> None:
     """Validate an uploaded AVS List CSV before it replaces the active mapping.
 
     Only the columns actually required to compute AVS ratings are enforced
-    (AppSpaceId, AssetType, Zone); AppSpaceName/AppSpaceTeam are sourced from
-    the vulnerability records themselves, not the mapping file.
+    (AppSpaceId, FundamentalClassification, Zone); AppSpaceName/AppSpaceTeam are
+    sourced from the vulnerability records themselves, not the mapping file.
+    The legacy "AssetType" header is accepted in place of FundamentalClassification.
     Raises ValueError with a descriptive message when validation fails.
     """
-    required = ("AppSpaceId", "AssetType", "Zone")
+    required = ("AppSpaceId", "FundamentalClassification", "Zone")
     try:
         header = pd.read_csv(path, dtype=str, nrows=0)
     except Exception as exc:  # pragma: no cover - pandas raises varied errors
         raise ValueError(f"Unable to read AVS List CSV: {exc}") from exc
-    missing = [column for column in required if column not in header.columns]
+    columns = set(header.columns)
+    if LEGACY_CLASSIFICATION_COLUMN in columns:
+        columns.add("FundamentalClassification")
+    missing = [column for column in required if column not in columns]
     if missing:
         raise ValueError(f"AVS List CSV is missing required column(s): {', '.join(missing)}")
 
 
 def load_static_mapping(path: Path = STATIC_MAPPING_PATH) -> pd.DataFrame:
-    """Load the AppSpaceId -> AssetType/Zone mapping used for AVS ratings."""
+    """Load the AppSpaceId -> FundamentalClassification/Zone mapping used for AVS ratings."""
     if not path.exists():
         return pd.DataFrame(columns=STATIC_MAPPING_COLUMNS)
     frame = pd.read_csv(path, dtype=str).fillna("")
+    if "FundamentalClassification" not in frame.columns and LEGACY_CLASSIFICATION_COLUMN in frame.columns:
+        frame = frame.rename(columns={LEGACY_CLASSIFICATION_COLUMN: "FundamentalClassification"})
     for column in STATIC_MAPPING_COLUMNS:
         if column not in frame.columns:
             frame[column] = ""
@@ -143,8 +155,7 @@ def _records_to_frame(records: list) -> pd.DataFrame:
             "AppSpaceTeam": getattr(record, "app_space_team", "Unknown") or "Unknown",
             "Severity": getattr(record, "severity", "Unknown"),
             "AgeDays": getattr(record, "age_days", 0) or 0,
-            "CVE": (getattr(record, "cve", "") or "").strip(),
-            "VendorReference": (getattr(record, "vendor", "") or "").strip(),
+            "UniqueVulnName": record_unique_vuln_name(record),
         }
         for record in records
     ]
@@ -155,25 +166,24 @@ def compute_avs(records: list) -> pd.DataFrame:
     """Compute AVS metrics per application (AppSpaceId) across all records.
 
     Returns a DataFrame indexed by AppSpaceId with columns AppSpaceName,
-    AppSpaceTeam, AssetType, Zone, AVSUniqueVulnCount, AVSScore, AVSLevel.
+    AppSpaceTeam, FundamentalClassification, Zone, AVSUniqueVulnCount, AVSScore, AVSLevel.
     """
     ensure_static_mapping(records)
     mapping = load_static_mapping()
     frame = _records_to_frame(records)
 
-    columns = ["AppSpaceName", "AppSpaceTeam", "AssetType", "Zone", "AVSUniqueVulnCount", "AVSScore", "AVSLevel"]
+    columns = ["AppSpaceName", "AppSpaceTeam", "FundamentalClassification", "Zone", "AVSUniqueVulnCount", "AVSScore", "AVSLevel"]
     if frame.empty:
         return pd.DataFrame(columns=["AppSpaceId", *columns]).set_index("AppSpaceId")
 
     # Step 1: filter to qualifying vulnerabilities (Severity 4/5, age > 45 days).
     qualifying = frame[frame["Severity"].isin(QUALIFYING_SEVERITIES) & (frame["AgeDays"] > AGE_THRESHOLD_DAYS)].copy()
 
-    # Step 2/3: dedupe by AppSpaceId + CVE (falling back to AppSpaceId + VendorReference
-    # when CVE is blank), then count unique vulnerabilities per application.
-    qualifying["DedupKey"] = qualifying["CVE"].where(~qualifying["CVE"].isin(BLANK_VALUES), qualifying["VendorReference"])
-    qualifying = qualifying[~qualifying["DedupKey"].isin(BLANK_VALUES)]
+    # Step 2/3: dedupe by AppSpaceId + Unique Vuln Name (CVE, falling back to
+    # VendorReference when CVE is blank), then count unique vulnerabilities per application.
+    qualifying = qualifying[~qualifying["UniqueVulnName"].isin(BLANK_VALUES)]
     unique_counts = (
-        qualifying.drop_duplicates(subset=["AppSpaceId", "DedupKey"])
+        qualifying.drop_duplicates(subset=["AppSpaceId", "UniqueVulnName"])
         .groupby("AppSpaceId")
         .size()
         .rename("AVSUniqueVulnCount")
@@ -183,15 +193,17 @@ def compute_avs(records: list) -> pd.DataFrame:
     result = apps.merge(unique_counts, on="AppSpaceId", how="left")
     result["AVSUniqueVulnCount"] = result["AVSUniqueVulnCount"].fillna(0).astype(int)
 
-    # Step 4: look up AssetType/Zone from the static mapping file.
-    result = result.merge(mapping[["AppSpaceId", "AssetType", "Zone"]], on="AppSpaceId", how="left")
-    result["AssetType"] = result["AssetType"].fillna(DEFAULT_ASSET_TYPE).replace("", DEFAULT_ASSET_TYPE)
+    # Step 4: look up FundamentalClassification/Zone from the static mapping file.
+    result = result.merge(mapping[["AppSpaceId", "FundamentalClassification", "Zone"]], on="AppSpaceId", how="left")
+    result["FundamentalClassification"] = (
+        result["FundamentalClassification"].fillna(DEFAULT_FUNDAMENTAL_CLASSIFICATION).replace("", DEFAULT_FUNDAMENTAL_CLASSIFICATION)
+    )
     result["Zone"] = result["Zone"].fillna(DEFAULT_ZONE).replace("", DEFAULT_ZONE)
 
     # Step 5/6: convert to numeric ratings and calculate the AVS score.
     result["ZoneRating"] = result["Zone"].map(zone_rating)
-    result["AssetRating"] = result["AssetType"].map(asset_type_rating)
-    result["AVSScore"] = result["AVSUniqueVulnCount"] * result["ZoneRating"] * result["AssetRating"]
+    result["ClassificationRating"] = result["FundamentalClassification"].map(fundamental_classification_rating)
+    result["AVSScore"] = result["AVSUniqueVulnCount"] * result["ZoneRating"] * result["ClassificationRating"]
 
     # Step 7: classify.
     result["AVSLevel"] = result["AVSScore"].map(classify_avs)
@@ -203,7 +215,7 @@ def attach_avs_to_records(records: list, per_app: pd.DataFrame | None = None) ->
     """Attach the per-application AVS results onto every matching record.
 
     Sets ``avs_score``, ``avs_level``, ``avs_unique_vuln_count``,
-    ``avs_asset_type``, and ``avs_zone`` on each ``Vulnerability`` so the same
+    ``fundamental_classification``, and ``zone`` on each ``Vulnerability`` so the same
     AVS values appear on every row belonging to that application in the
     processed output. Returns the per-application DataFrame used.
     """
@@ -217,14 +229,14 @@ def attach_avs_to_records(records: list, per_app: pd.DataFrame | None = None) ->
             record.avs_score = float(row["AVSScore"])
             record.avs_level = row["AVSLevel"]
             record.avs_unique_vuln_count = int(row["AVSUniqueVulnCount"])
-            record.avs_asset_type = row["AssetType"]
-            record.avs_zone = row["Zone"]
+            record.fundamental_classification = row["FundamentalClassification"]
+            record.zone = row["Zone"]
         else:
             record.avs_score = 0.0
             record.avs_level = default_level
             record.avs_unique_vuln_count = 0
-            record.avs_asset_type = DEFAULT_ASSET_TYPE
-            record.avs_zone = DEFAULT_ZONE
+            record.fundamental_classification = DEFAULT_FUNDAMENTAL_CLASSIFICATION
+            record.zone = DEFAULT_ZONE
     return per_app
 
 
@@ -243,7 +255,7 @@ def build_avs_summary(per_app: pd.DataFrame) -> dict:
             "AppSpaceId": app_id,
             "AppSpaceName": row["AppSpaceName"],
             "AppSpaceTeam": row["AppSpaceTeam"],
-            "AssetType": row["AssetType"],
+            "FundamentalClassification": row["FundamentalClassification"],
             "Zone": row["Zone"],
             "AVSUniqueVulnCount": int(row["AVSUniqueVulnCount"]),
             "AVSScore": round(float(row["AVSScore"]), 2),

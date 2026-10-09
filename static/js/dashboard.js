@@ -9,11 +9,20 @@ function matchingRecords() {
   return (data.records || []).filter(record => recordMatchesFilters(record, filters) && (!query || JSON.stringify(record).toLowerCase().includes(query)));
 }
 
+const EXPLOIT_COLORS = { Exploitable: '#c9363e', 'Not exploitable': '#9fb7b7' };
+
+// Exploit flag of a record (boolean in the API, "TRUE"/"FALSE" in CSV data).
+function isExploit(record) {
+  const value = record.Exploit;
+  return value === true || String(value).trim().toUpperCase() === 'TRUE';
+}
+
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
 function buildFilteredCsv(records) {
-  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'DependantTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLA Breach', 'Overdue', 'Aging Bucket'];
-  return [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(record[column])).join(','))].join('\r\n');
+  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'Unique Vuln Name', 'VULN COUNT', 'ThreatIntel', 'Exploit', 'RemitTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLA Breach', 'Overdue', 'Aging Bucket', 'FundamentalClassification', 'Zone'];
+  const cellValue = (record, column) => (column === 'Exploit' ? (isExploit(record) ? 'TRUE' : 'FALSE') : record[column]);
+  return [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(cellValue(record, column))).join(','))].join('\r\n');
 }
 
 function downloadBlob(content, mimeType, filename) {
@@ -131,6 +140,8 @@ function renderKpis(records) {
     ['Unique Servers', new Set(records.map(r => r.ServerName)).size, '⌁'],
     ['Applications', new Set(records.map(r => r.AppSpaceName)).size, '▦'],
     ['PCI Required', count(r => r['PCI Required']), '▣'],
+    ['Exploitable Vulnerabilities', count(isExploit), '⚠', 'kpi-critical'],
+    ['Unique Vuln Instances', new Set(records.map(r => r['VULN COUNT']).filter(Boolean)).size, '#'],
   ];
   $('kpis').innerHTML = values.map(x => kpi(...x)).join('');
 }
@@ -155,6 +166,12 @@ function renderCharts(records) {
 
   const servers = {};
   records.forEach(r => { servers[r.ServerName] = (servers[r.ServerName] || 0) + 1; });
+  const exploitCount = records.filter(isExploit).length;
+  const exploit = { Exploitable: exploitCount, 'Not exploitable': records.length - exploitCount };
+  donut($('exploitChart'), exploit, EXPLOIT_COLORS);
+  $('exploitTotal').textContent = exploitCount.toLocaleString();
+  $('exploitLegend').innerHTML = Object.entries(exploit).map(([key, value]) => `<span class="legend-item"><i class="legend-dot" style="background:${EXPLOIT_COLORS[key]}"></i>${key} ${value}</span>`).join('');
+
   horizontalBars($('serverChart'), Object.entries(servers).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, total]) => ({ name, total })), '#de8324');
 
   // Environment distribution: dynamic categories, so build a stable palette-based color map.
@@ -209,7 +226,7 @@ function rankList(id, records, key) {
 }
 
 function renderRegisterRow(r) {
-  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.DependantTeam || 'Other')}</td><td>${esc(r.Group || 'Suncorp Group')}</td><td>${esc(r.QID)}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r['SLA Breach'] ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
+  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.RemitTeam || 'Other')}</td><td>${esc(r.Group || 'Suncorp Group')}</td><td>${esc(r.QID)}</td><td>${esc(r['Unique Vuln Name'] || '-')}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${isExploit(r) ? '<span class="sla-badge">TRUE</span>' : 'FALSE'}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r['SLA Breach'] ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
 }
 
 function recordSearchText(record) { return JSON.stringify(record).toLowerCase(); }
@@ -217,7 +234,7 @@ function recordSearchText(record) { return JSON.stringify(record).toLowerCase();
 const registerTable = createDataTable({
   tbodyId: 'recordsTable', searchInputId: 'tableSearch', pageSizeSelectId: 'recordsPageSize',
   previousButtonId: 'previousPage', nextButtonId: 'nextPage', pageInfoId: 'pageInfo', countId: 'tableCount',
-  colSpan: 14, renderRow: renderRegisterRow, emptyMessage: 'No vulnerabilities match the current scope',
+  colSpan: 16, renderRow: renderRegisterRow, emptyMessage: 'No vulnerabilities match the current scope',
   matches: (row, query) => recordSearchText(row).includes(query),
 });
 

@@ -36,8 +36,8 @@ def make_record(**overrides):
         "Days Overdue": 60,
         "SLA Breach": True,
         "Overdue": True,
-        "AVS Asset Type": "Other",
-        "AVS Zone": "Internal",
+        "FundamentalClassification": "Other",
+        "Zone": "Internal",
     }
     record.update(overrides)
     return record
@@ -91,7 +91,7 @@ def high_avs_records():
             AppSpaceId="AS-TRD",
             AppSpaceTeam="Markets",
             CVE=f"CVE-2026-9{index:03d}",
-            **{"AVS Zone": "External", "AVS Asset Type": "Essential"},
+            **{"Zone": "External", "FundamentalClassification": "Essential"},
         ))
     records.append(make_record(
         ServerName="SRV-Y1",
@@ -99,7 +99,7 @@ def high_avs_records():
         AppSpaceId="AS-INT",
         AppSpaceTeam="Corporate IT",
         CVE="CVE-2026-8000",
-        **{"AVS Zone": "Internal & Protected", "AVS Asset Type": "Other"},
+        **{"Zone": "Internal & Protected", "FundamentalClassification": "Other"},
     ))
     return records
 
@@ -233,7 +233,7 @@ class FilteredDataAnswerTests(unittest.TestCase):
 
     def test_avs_explanation_is_static_but_cites_current_scope(self):
         answer = ask("AVS score explanation", high_avs_records())
-        self.assertIn("zone rating", answer["summary"])
+        self.assertIn("Zone rating", answer["summary"])
         self.assertIn("Trading Gateway", answer["notes"][0])
 
     def test_avs_explanation_works_without_any_records(self):

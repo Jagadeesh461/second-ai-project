@@ -104,6 +104,16 @@ Browser JavaScript renders KPIs, charts, filters, tables, and export files
 7. Each row becomes a `Vulnerability` object.
 8. Vulnerability age (`LastDetected` minus `FirstDetected`), SLA due dates, overdue status, and breach status are calculated from the record data and current date.
 9. The processed dataset is saved to `output/processed_vulnerabilities.csv`. Its `Severity` column holds the numeric 1-5 value from the input report (text labels in the input are converted: Critical 5, High 3, Medium 2, Low 1); the dashboard itself still shows the normalized Critical/High/Medium/Low labels.
+   The processed file also carries these derived columns (the same names are used by the dashboard, filters, charts, AVS, PDF report, CSV exports, API and AI assistant):
+
+   | Column | Logic |
+   | --- | --- |
+   | `FundamentalClassification` | AVS classification of the application from `static/static_mapping.csv` (formerly `AVS Asset Type`). |
+   | `Zone` | AVS exposure zone of the application from `static/static_mapping.csv` (formerly `AVS Zone`). |
+   | `RemitTeam` | Remit Team resolved from `Detection` (formerly `DependantTeam`). |
+   | `Exploit` | `TRUE` when `ThreatIntel` mentions "Exploit" or "Active" (case-insensitive), otherwise `FALSE`. Negated phrases such as "No Known Exploit" count as `FALSE`. |
+   | `Unique Vuln Name` | `COALESCE(CVE, VendorReference)`; `Unknown` only when both are blank. |
+   | `VULN COUNT` | `ServerName + AppSpaceName + Unique Vuln Name` (plain concatenation), one identifier per Server/Application/Vulnerability combination. |
 10. The service calculates aggregate statistics once and saves them to `output/dashboard_stats.json`.
 11. The template embeds the cached JSON in the page.
 12. Browser JavaScript renders the dashboard. Dropdowns and search filter the loaded processed records in memory.
@@ -139,15 +149,16 @@ Vuln management/
 |-- utils/
 |   |-- __init__.py
 |   |-- date_utils.py
-|   |-- dependant_team.py
+|   |-- remit_team.py
 |   |-- group.py
+|   |-- vuln_identity.py
 |   `-- calculation_utils.py
 |
 |-- templates/
 |   `-- dashboard.html
 |
 `-- static/
-    |-- dependant_team_mapping.json
+    |-- remit_team_mapping.json
     |-- group_mapping.json
     |-- css/
     |   `-- dashboard.css
@@ -190,7 +201,7 @@ A small standalone Python example created before the dashboard. It is not used b
 
 Defines the `Vulnerability` data model.
 
-It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, dependant team, group, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
+It stores normalized fields such as server, environment, AppSpace, severity, status, CVE, vendor, remit team, group, PCI state, dates, SLA results, and aging information. Its `to_dict()` method prepares a record for JSON and frontend use.
 
 The file also defines the supported standard severity values:
 
@@ -220,8 +231,8 @@ Responsibilities:
 - Removes exact duplicate rows.
 - Normalizes severity and status values.
 - Calculates vulnerability age (`LastDetected` minus `FirstDetected`, in days), aging bucket, SLA due date, overdue state, and breach state.
-- Resolves `DependantTeam` from the `Detection` value using the keyword rules in `static/dependant_team_mapping.json`.
-- Resolves `Group` from the resolved `DependantTeam` value using the rule in `static/group_mapping.json` (`Change/ITO` -> `Suncorp Bank`; every other `DependantTeam` -> `Suncorp Group`).
+- Resolves `RemitTeam` from the `Detection` value using the keyword rules in `static/remit_team_mapping.json`.
+- Resolves `Group` from the resolved `RemitTeam` value using the rule in `static/group_mapping.json` (`Change/ITO` -> `Suncorp Bank`; every other `RemitTeam` -> `Suncorp Group`).
 - Returns records plus metadata such as skipped duplicates, invalid dates, and original columns.
 
 The required standard input columns are `ServerName`, `OperatingSystem`, `Environment`, `AppSpaceId`, `AppSpaceName`, `AppSpaceTeam`, `QID`, `VulnerabilityName`, `Severity`, `AssetRiskScore`, `PCIRequired`, `Category`, `CVE`, `VendorReference`, `FirstDetected`, `LastDetected`, `Resolved`, `SIABreach`, and `Status`.
@@ -243,8 +254,9 @@ It calculates:
 - Aging distribution
 - Aging by severity and status
 - Environment metrics
-- DependantTeam counts
+- RemitTeam counts
 - Group counts
+- Exploit counts (`TRUE`/`FALSE`), the Exploitable KPI and the distinct `VULN COUNT` (Unique Vuln Instances) KPI
 - AppSpace risk matrix data
 - Top vulnerable servers
 - Top CVEs
@@ -265,30 +277,34 @@ Provides safe parsing helpers:
 
 Invalid values return safe empty results instead of crashing the application.
 
-### `utils/dependant_team.py`
+### `utils/vuln_identity.py`
 
-Resolves the `DependantTeam` value for each finding.
+Derives the `Exploit`, `Unique Vuln Name` and `VULN COUNT` columns (`is_exploit()`, `unique_vuln_name()`, `vuln_count_key()`). AVS uses `Unique Vuln Name` as its uniqueness key.
 
-- Loads the keyword rules from `static/dependant_team_mapping.json`.
+### `utils/remit_team.py`
+
+Resolves the `RemitTeam` value for each finding.
+
+- Loads the keyword rules from `static/remit_team_mapping.json`.
 - Matches the raw `Detection` value against every keyword, case-insensitively.
 - Uses the longest matching keyword when several rules match, so the most specific rule wins.
 - Returns `Other` when the detection is empty or matches no rule.
 
-### `static/dependant_team_mapping.json`
+### `static/remit_team_mapping.json`
 
-Holds every `Detection` keyword to `DependantTeam` rule as a flat JSON object, for example `"/apps/ctm": "Control-M"` and `"splunk": "AppHealth"`. Edit this file to change the mapping; no code change is needed.
+Holds every `Detection` keyword to `RemitTeam` rule as a flat JSON object, for example `"/apps/ctm": "Control-M"` and `"splunk": "AppHealth"`. Edit this file to change the mapping; no code change is needed.
 
 ### `utils/group.py`
 
-Resolves the `Group` value for each finding from its already-resolved `DependantTeam` value.
+Resolves the `Group` value for each finding from its already-resolved `RemitTeam` value.
 
 - Loads the rules from `static/group_mapping.json`.
-- Looks up the `DependantTeam` value case-insensitively.
-- Returns `Suncorp Group` when the `DependantTeam` is empty or matches no rule.
+- Looks up the `RemitTeam` value case-insensitively.
+- Returns `Suncorp Group` when the `RemitTeam` is empty or matches no rule.
 
 ### `static/group_mapping.json`
 
-Holds every `DependantTeam` to `Group` rule as a flat JSON object. Ships with `{"Change/ITO": "Suncorp Bank"}`, so `Change/ITO` resolves to `Suncorp Bank` and every other `DependantTeam` (Wintel, Midrange, Dynatrace, Control-M, AppHealth, Other, ...) resolves to the default `Suncorp Group`. Edit this file to change the mapping; no code change is needed.
+Holds every `RemitTeam` to `Group` rule as a flat JSON object. Ships with `{"Change/ITO": "Suncorp Bank"}`, so `Change/ITO` resolves to `Suncorp Bank` and every other `RemitTeam` (Wintel, Midrange, Dynatrace, Control-M, AppHealth, Other, ...) resolves to the default `Suncorp Group`. Edit this file to change the mapping; no code change is needed.
 
 ### `utils/calculation_utils.py`
 
@@ -364,7 +380,7 @@ Builds the filter controls from the option lists returned by Python.
 It:
 
 - Creates labeled dropdowns.
-- Adds environment, severity, status, dependant team, AppSpace, team, operating system, and category options.
+- Adds environment, severity, status, remit team, AppSpace, team, operating system, and category options.
 - Escapes option text before inserting it into the page.
 - Returns the selected filter values to the main dashboard script.
 - Resolves the `Group` filter definition (`key: 'group'`, values `Suncorp Bank` / `Suncorp Group`) so the primary Group selector rendered in the topbar (see `templates/dashboard.html`) participates in `getFilters()`/`recordMatchesFilters()`/`optionValues()` exactly like the regular toolbar filters, even though it is not one of the auto-rendered `FILTER_FIELDS`.
@@ -392,14 +408,14 @@ It:
 - Defines the zone and asset rating constants and the Low / Medium / High thresholds.
 - Computes per-AppSpace scores from a record set, deduplicating by CVE (or vendor reference when no CVE exists).
 - Contains no DOM access, so both `avs.js` and the assistant reuse the same numbers.
-- Provides `computeAvsDrilldown(records, appId)` for the AVS List drill-down. It reuses the exact AVS inclusion rule (`avsQualifies`: Severity 4/5, age > 45 days) and uniqueness key (`avsDedupKey`: CVE, else vendor reference), so a drill-down total always equals that application's "Unique Vulnerabilities" count. Each unique vulnerability is grouped into one of `CoreOS`, `Java`, `Agents`, `ThirdParty`, `Others` (from the source `Category` column; unrecognised values fall into `Others`), with percentages rounded to one decimal using largest-remainder rounding so they always total 100%. Average age is the mean of the unique vulnerabilities' ages (oldest occurrence per vulnerability). Sev4/Sev5 counts are unique-vulnerability counts: each unique vulnerability is reported once at its highest raw source severity (Sev5 wins over Sev4, from the `Severity Level` field), so Unique Sev4 + Unique Sev5 always equals the unique total.
+- Provides `computeAvsDrilldown(records, appId)` for the AVS List drill-down. It reuses the exact AVS inclusion rule (`avsQualifies`: Severity 4/5, age > 45 days) and uniqueness key (`avsDedupKey`: the record's `Unique Vuln Name`, i.e. CVE, else VendorReference), so a drill-down total always equals that application's "Unique Vulnerabilities" count. Each unique vulnerability is grouped into one of `CoreOS`, `Java`, `Agents`, `ThirdParty`, `Others` (from the source `Category` column; unrecognised values fall into `Others`), with percentages rounded to one decimal using largest-remainder rounding so they always total 100%. Average age is the mean of the unique vulnerabilities' ages (oldest occurrence per vulnerability). Sev4/Sev5 counts are unique-vulnerability counts: each unique vulnerability is reported once at its highest raw source severity (Sev5 wins over Sev4, from the `Severity Level` field), so Unique Sev4 + Unique Sev5 always equals the unique total.
 
 ### `static/js/avs.js`
 
 Renders the AVS section: KPI cards, charts, the AVS List table, and the application drill-down.
 
 - Clicking (or pressing Enter on) an AVS List row opens the drill-down directly below the table, titled with the AppSpace name: KPI cards (total unique Sev4/5 vulnerabilities, average age, unique Sev4 and unique Sev5 counts), a category pie chart, and a category breakdown table.
-- Clicking a pie slice, legend chip, or breakdown row shows the category detail table (Vulnerability Name, CVE Number, Severity, First Detected Date, Age, Solution). The table has one row per unique vulnerability; the Severity column shows a single `Sev4` or `Sev5` badge, and the header summary shows the category's unique count with `Unique Sev4 Count : X` / `Unique Sev5 Count : Y`.
+- Clicking a pie slice, legend chip, or breakdown row shows the category detail table (Vulnerability Name, CVE Number, Severity, First Detected Date, Age, Exploit, Solution). The table has one row per unique vulnerability; the Severity column shows a single `Sev4` or `Sev5` badge, and the header summary shows the category's unique count with `Unique Sev4 Count : X` / `Unique Sev5 Count : Y`.
 - Clicking the selected row again, or Close, hides the drill-down. It also recomputes with the dashboard filters and hides itself if the selected application leaves the filtered scope.
 
 ### `static/js/assistant-engine.js`
@@ -473,7 +489,7 @@ Stop the server with `Ctrl+C`.
 ## Using the Dashboard
 
 1. Use the Group selector in the top-right corner (below the findings-loaded indicator) to scope the entire dashboard to `Suncorp Bank`, `Suncorp Group`, or `All`. This is the primary/global filter and combines with every other filter below.
-2. Use the dropdowns in the dark filter toolbar to select environment, severity, status, dependant team, AppSpace, team, operating system, or category.
+2. Use the dropdowns in the dark filter toolbar to select environment, severity, status, remit team, AppSpace, team, operating system, or category.
 3. Use the search box to find a server, QID, CVE, or vulnerability name.
 4. All KPI cards, charts, matrix rows, critical findings, ranking lists, and table rows update to the current scope.
 5. Use Reset filters to return to the full report.
@@ -509,6 +525,6 @@ Run the unit tests from the project directory:
 py -m unittest discover -s tests
 ```
 
-The suite covers the AVS calculator, the AVS List drill-down (category pie, percentages, uniqueness, age filter, Sev4/Sev5 detail), the import workflow, the age calculation, the `Detection` to `DependantTeam` mapping, the DependantTeam dashboard filter, the `DependantTeam` to `Group` mapping and Group dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
+The suite covers the AVS calculator, the AVS List drill-down (category pie, percentages, uniqueness, age filter, Sev4/Sev5 detail), the import workflow, the age calculation, the `Detection` to `RemitTeam` mapping, the RemitTeam dashboard filter, the processed-report columns (`FundamentalClassification`, `Zone`, `Exploit`, `Unique Vuln Name`, `VULN COUNT`), the `RemitTeam` to `Group` mapping and Group dashboard filter, and the browser-side AI assistant. The JavaScript tests execute the real files in `static/js` with the `dukpy` engine and a small DOM stub, so no Node.js install is required.
 
 The report currently loads dynamically from the CSV. With the provided report, the API should return the actual number of parsed records and the filter option lists derived from those records.

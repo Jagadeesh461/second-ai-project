@@ -33,7 +33,9 @@ const ASSISTANT_FILTER_FIELD_CUES = {
   app_space_team: ['team'],
   app_space_name: ['appspace', 'app space', 'application', 'app'],
   environment: ['environment', 'env'],
-  dependant_team: ['dependant team', 'dependent team', 'dependant', 'dependent'],
+  remit_team: ['remit team', 'remit'],
+  fundamental_classification: ['fundamental classification', 'classification'],
+  zone: ['zone'],
   operating_system: ['operating system', 'os'],
   type_category: ['category'],
   group: ['group'],
@@ -41,7 +43,7 @@ const ASSISTANT_FILTER_FIELD_CUES = {
 
 // Fields whose values are free text and must be recognised from the actual
 // dataset rather than a fixed vocabulary.
-const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'dependant_team', 'operating_system', 'type_category', 'environment', 'group'];
+const ASSISTANT_FREE_TEXT_FIELDS = ['app_space_owner', 'app_space_team', 'app_space_name', 'remit_team', 'operating_system', 'type_category', 'environment', 'group', 'fundamental_classification', 'zone'];
 
 function assistantFieldOptions(records, key) {
   // Reuses the dashboard's own option-listing helper (filters.js) so every
@@ -54,7 +56,7 @@ function assistantFindCue(lowerQuery, cues) {
   return (cues || []).some(cue => lowerQuery.includes(cue));
 }
 
-// Recognises free-text filter values (AppSpace, Owner, Team, Dependant Team,
+// Recognises free-text filter values (AppSpace, Owner, Team, Remit Team,
 // OS, Category, Environment) by checking whether any real value already present
 // in the dataset appears verbatim in the question.
 function assistantExtractFieldFilters(query, records) {
@@ -101,7 +103,7 @@ function assistantExtractAvsLevel(lowerQuery) {
 }
 
 // Recognises the dashboard's enumerated filters (Severity, Status, PCI
-// Required, SLA Breach) directly from a fixed vocabulary.
+// Required, SLA Breach, Exploit) directly from a fixed vocabulary.
 function assistantExtractEnumeratedFilters(query, avsLevel) {
   const lowerQuery = query.toLowerCase();
   const avsMention = avsLevel
@@ -114,6 +116,7 @@ function assistantExtractEnumeratedFilters(query, avsLevel) {
   const status = ASSISTANT_STATUSES.find(value => withoutAvsMention.includes(value.toLowerCase()));
   if (status) filters.status = [status];
   if (/\bpci\b/.test(lowerQuery) && /\brequired\b|\bneeded\b/.test(lowerQuery)) filters.pci_required = ['Yes'];
+  if (/\bexploit(s|able|ed)?\b/.test(lowerQuery)) filters.exploit = [/\b(non|not)[\s-]?exploit/.test(lowerQuery) ? 'FALSE' : 'TRUE'];
   if (/\bsla\b[\s\S]{0,20}\bbreach/.test(lowerQuery) || /\bbreach(ed|es)?\b[\s\S]{0,20}\bsla\b/.test(lowerQuery)) filters.sla_breach = ['Yes'];
   return filters;
 }
@@ -129,7 +132,7 @@ function assistantExtractFilters(query, records) {
 // Extra response-type intents beyond the seven suggested questions
 // (ASSISTANT_QUESTIONS stays limited to those for the suggestion chips).
 //
-// `fieldFilters` (the free-text AppSpace/Owner/Team/Dependant Team/OS/Category/
+// `fieldFilters` (the free-text AppSpace/Owner/Team/Remit Team/OS/Category/
 // Environment values already recognised for this question) are stripped out
 // before falling back to the keyword-based question matcher, so a field name
 // used purely as a filter cue (e.g. the word "AppSpace" in "AppSpace owner
@@ -184,6 +187,10 @@ function assistantCountBy(records, keyOf) {
 
 function assistantTopEntries(counts, limit) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
+}
+
+function assistantIsExploit(record) {
+  return record.Exploit === true || String(record.Exploit).trim().toUpperCase() === 'TRUE';
 }
 
 function assistantSeverityCounts(records) {
@@ -257,6 +264,8 @@ function assistantSummaryAnswer(records) {
       { label: 'SLA breached', value: `${assistantNumber(breached)} (${assistantPercent(breached, records.length)})` },
       { label: 'Overdue', value: assistantNumber(overdue) },
       { label: 'PCI required', value: assistantNumber(records.filter(r => r['PCI Required']).length) },
+      { label: 'Exploitable', value: assistantNumber(records.filter(assistantIsExploit).length) },
+      { label: 'Unique vuln instances', value: assistantNumber(new Set(records.map(r => r['VULN COUNT']).filter(Boolean)).size) },
       { label: 'AVS High', value: assistantNumber(avsCounts.High) },
       { label: 'AVS Medium', value: assistantNumber(avsCounts.Medium) },
       { label: 'AVS Low', value: assistantNumber(avsCounts.Low) },
@@ -341,9 +350,9 @@ function assistantHighAvsAnswer(records, level) {
     items: shown.slice(0, 10).map(app => ({
       label: app.name,
       value: `AVS ${app.score.toFixed(1)}`,
-      detail: `${app.team} | ${app.uniqueCount} qualifying vulns | ${app.zone} | ${app.assetType}`,
+      detail: `${app.team} | ${app.uniqueCount} qualifying vulns | Zone ${app.zone} | ${app.fundamentalClassification}`,
     })),
-    notes: matched.length ? ['Prioritise these applications first: AVS combines exposure zone and asset criticality.'] : [],
+    notes: matched.length ? ['Prioritise these applications first: AVS combines Zone exposure and FundamentalClassification.'] : [],
   };
 }
 
@@ -361,6 +370,8 @@ function assistantCountAnswer(records) {
       { label: 'Total', value: assistantNumber(records.length) },
       ...ASSISTANT_SEVERITIES.map(name => ({ label: name, value: assistantNumber(records.filter(r => r.Severity === name).length) })),
       { label: 'SLA breached', value: assistantNumber(records.filter(r => r['SLA Breach']).length) },
+      { label: 'Exploitable', value: assistantNumber(records.filter(assistantIsExploit).length) },
+      { label: 'Unique vuln instances', value: assistantNumber(new Set(records.map(r => r['VULN COUNT']).filter(Boolean)).size) },
     ],
     items: appCounts.map(([name, total]) => ({ label: name, value: `${assistantNumber(total)} findings` })),
     notes: ['Affected AppSpaces, ranked by finding count within the current criteria.'],
@@ -507,17 +518,17 @@ function assistantAvsExplanationAnswer(records) {
   return {
     id: 'avs-explained',
     title: 'How the AVS score works',
-    summary: 'AVS (Application Vulnerability Score) = qualifying vulnerabilities x zone rating x asset rating, calculated per AppSpace.',
+    summary: 'AVS (Application Vulnerability Score) = qualifying vulnerabilities x Zone rating x FundamentalClassification rating, calculated per AppSpace.',
     stats: [
       { label: 'External zone', value: 'x5' },
       { label: 'Internal zone', value: 'x1' },
       { label: 'Internal & Protected', value: 'x0.2' },
-      { label: 'Essential / Fundamental asset', value: 'x2' },
-      { label: 'Other asset', value: 'x1' },
+      { label: 'Essential / Fundamental classification', value: 'x2' },
+      { label: 'Other classification', value: 'x1' },
     ],
     items: [
       { label: 'Qualifying vulnerability', value: 'Critical severity and older than 45 days' },
-      { label: 'Deduplication', value: 'Unique CVE per application, or vendor reference when no CVE exists' },
+      { label: 'Deduplication', value: 'Unique Vuln Name per application (CVE, or VendorReference when no CVE exists)' },
       { label: 'Low', value: 'Score below 500' },
       { label: 'Medium', value: 'Score from 500 to 1000' },
       { label: 'High', value: 'Score above 1000' },
@@ -571,8 +582,8 @@ const ASSISTANT_INTENT_OWNED_FIELDS = {
 // produces a structured answer.
 //
 // Any filter criteria named in the question (AppSpace, Owner, Team,
-// Environment, Severity, Status, Dependant Team, Group, OS, Category, PCI, SLA
-// Breach, AVS Level) are converted into the dashboard's own filter object and
+// Environment, Severity, Status, Remit Team, Group, OS, Category, PCI, SLA
+// Breach, Exploit, FundamentalClassification, Zone, AVS Level) are converted into the dashboard's own filter object and
 // applied with the dashboard's own recordMatchesFilters() predicate (filters.js).
 // The chatbot never re-implements filtering: it only decides *which*
 // dashboard filters a question means, then reuses the exact same logic the

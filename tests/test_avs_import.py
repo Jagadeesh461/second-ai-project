@@ -109,11 +109,11 @@ class AvsImportWorkflowTests(unittest.TestCase):
             writer.writerow(row)
         return path
 
-    def write_mapping_csv(self, path: Path, asset_type: str, zone: str) -> Path:
+    def write_mapping_csv(self, path: Path, classification: str, zone: str, classification_header: str = "FundamentalClassification") -> Path:
         with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=["AppSpaceId", "AppSpaceName", "AppSpaceTeam", "AssetType", "Zone"])
+            writer = csv.DictWriter(handle, fieldnames=["AppSpaceId", "AppSpaceName", "AppSpaceTeam", classification_header, "Zone"])
             writer.writeheader()
-            writer.writerow({"AppSpaceId": "APP-1", "AppSpaceName": "Payments", "AppSpaceTeam": "Platform", "AssetType": asset_type, "Zone": zone})
+            writer.writerow({"AppSpaceId": "APP-1", "AppSpaceName": "Payments", "AppSpaceTeam": "Platform", classification_header: classification, "Zone": zone})
         return path
 
     def test_import_archives_previous_mapping_and_activates_new_file(self):
@@ -122,7 +122,7 @@ class AvsImportWorkflowTests(unittest.TestCase):
         self.assertTrue(self.mapping_path.exists())  # auto-generated on first process
 
         new_mapping = self.root / "upload.csv"
-        self.write_mapping_csv(new_mapping, asset_type="Database", zone="External")
+        self.write_mapping_csv(new_mapping, classification="Database", zone="External")
 
         with new_mapping.open("rb") as handle:
             result = service.import_avs_list(handle, "upload.csv")
@@ -140,27 +140,27 @@ class AvsImportWorkflowTests(unittest.TestCase):
         self.write_report_csv(self.data_dir / "latest.csv")
         first = service.process_latest_report(force=True)
         first_app = first["dashboard"]["avs"]["applications"][0]
-        self.assertEqual(first_app["AssetType"], "Other")
+        self.assertEqual(first_app["FundamentalClassification"], "Other")
         self.assertEqual(first_app["Zone"], "Internal")
 
         new_mapping = self.root / "upload.csv"
-        self.write_mapping_csv(new_mapping, asset_type="Database", zone="External")
+        self.write_mapping_csv(new_mapping, classification="Database", zone="External")
         with new_mapping.open("rb") as handle:
             result = service.import_avs_list(handle, "upload.csv")
 
         updated_app = result["dashboard"]["avs"]["applications"][0]
-        self.assertEqual(updated_app["AssetType"], "Database")
+        self.assertEqual(updated_app["FundamentalClassification"], "Database")
         self.assertEqual(updated_app["Zone"], "External")
 
         cached = service._read_json(service.DASHBOARD_STATS_PATH)
-        self.assertEqual(cached["avs"]["applications"][0]["AssetType"], "Database")
+        self.assertEqual(cached["avs"]["applications"][0]["FundamentalClassification"], "Database")
 
     def test_import_does_not_touch_report_input_or_its_archive(self):
         report_path = self.write_report_csv(self.data_dir / "latest.csv")
         service.process_latest_report(force=True)
 
         new_mapping = self.root / "upload.csv"
-        self.write_mapping_csv(new_mapping, asset_type="Database", zone="External")
+        self.write_mapping_csv(new_mapping, classification="Database", zone="External")
         with new_mapping.open("rb") as handle:
             service.import_avs_list(handle, "upload.csv")
 
@@ -196,7 +196,7 @@ class AvsImportWorkflowTests(unittest.TestCase):
         service.process_latest_report(force=True)
 
         new_mapping = self.root / "upload.csv"
-        self.write_mapping_csv(new_mapping, asset_type="Database", zone="External")
+        self.write_mapping_csv(new_mapping, classification="Database", zone="External")
         payload = {"avs_list": (io.BytesIO(new_mapping.read_bytes()), "upload.csv")}
         client = flask_app.app.test_client()
 
@@ -206,7 +206,7 @@ class AvsImportWorkflowTests(unittest.TestCase):
         result = response.get_json()
         self.assertTrue(result["ok"])
         self.assertIsNotNone(result["archived"])
-        self.assertEqual(result["dashboard"]["avs"]["applications"][0]["AssetType"], "Database")
+        self.assertEqual(result["dashboard"]["avs"]["applications"][0]["FundamentalClassification"], "Database")
 
     def test_flask_avs_export_endpoint_downloads_active_mapping(self):
         self.write_report_csv(self.data_dir / "latest.csv")
@@ -223,7 +223,7 @@ class AvsImportWorkflowTests(unittest.TestCase):
         self.write_report_csv(self.data_dir / "latest.csv")
         service.process_latest_report(force=True)
         new_mapping = self.root / "upload.csv"
-        self.write_mapping_csv(new_mapping, asset_type="Database", zone="External")
+        self.write_mapping_csv(new_mapping, classification="Database", zone="External")
         with new_mapping.open("rb") as handle:
             service.import_avs_list(handle, "upload.csv")
         client = flask_app.app.test_client()

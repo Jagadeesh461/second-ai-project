@@ -37,8 +37,8 @@ def make_record(**overrides):
         "Days Overdue": 60,
         "SLA Breach": True,
         "Overdue": True,
-        "AVS Asset Type": "Other",
-        "AVS Zone": "Internal",
+        "FundamentalClassification": "Other",
+        "Zone": "Internal",
     }
     record.update(overrides)
     return record

@@ -80,14 +80,14 @@ function renderAvs(records) {
 
 function renderAvsRow(a) {
   const selected = a.appId === avsSelectedAppId;
-  return `<tr class="avs-row-clickable${selected ? ' avs-row-selected' : ''}" data-app-id="${esc(a.appId)}" tabindex="0" aria-selected="${selected}" title="View AVS drill-down"><td><strong>${esc(a.name)}</strong></td><td>${esc(a.team)}</td><td>${a.score.toFixed(1)}</td><td>${badge(a.level, 'avs')}</td><td>${a.uniqueCount}</td><td>${esc(a.assetType)}</td><td>${esc(a.zone)}</td></tr>`;
+  return `<tr class="avs-row-clickable${selected ? ' avs-row-selected' : ''}" data-app-id="${esc(a.appId)}" tabindex="0" aria-selected="${selected}" title="View AVS drill-down"><td><strong>${esc(a.name)}</strong></td><td>${esc(a.team)}</td><td>${a.score.toFixed(1)}</td><td>${badge(a.level, 'avs')}</td><td>${a.uniqueCount}</td><td>${esc(a.fundamentalClassification)}</td><td>${esc(a.zone)}</td></tr>`;
 }
 
 const avsTable = createDataTable({
   tbodyId: 'avsTable', searchInputId: 'avsSearch', pageSizeSelectId: 'avsPageSize',
   previousButtonId: 'avsPreviousPage', nextButtonId: 'avsNextPage', pageInfoId: 'avsPageInfo', countId: 'avsCount',
   colSpan: 7, renderRow: renderAvsRow, emptyMessage: 'No application data in current scope',
-  matches: (row, query) => `${row.name} ${row.team} ${row.assetType} ${row.zone} ${row.level}`.toLowerCase().includes(query),
+  matches: (row, query) => `${row.name} ${row.team} ${row.fundamentalClassification} ${row.zone} ${row.level}`.toLowerCase().includes(query),
 });
 
 // Delegated so the listener survives every innerHTML re-render of #avsKpis.
@@ -114,15 +114,19 @@ function avsSeverityCell(v) {
   return `<span class="avs-sev-badge${tone}">${esc(v.severity)}</span>`;
 }
 
+function avsExploitCell(v) {
+  return v.exploit ? '<span class="avs-sev-badge avs-sev-5">TRUE</span>' : 'FALSE';
+}
+
 function renderAvsDetailRow(v) {
-  return `<tr><td><strong>${esc(v.name)}</strong></td><td>${esc(v.cve)}</td><td>${avsSeverityCell(v)}</td><td>${esc(v.firstDetected || '—')}</td><td>${v.age} days</td><td class="avs-solution">${esc(v.solution || '—')}</td></tr>`;
+  return `<tr><td><strong>${esc(v.name)}</strong></td><td>${esc(v.cve)}</td><td>${avsSeverityCell(v)}</td><td>${esc(v.firstDetected || '—')}</td><td>${v.age} days</td><td>${avsExploitCell(v)}</td><td class="avs-solution">${esc(v.solution || '—')}</td></tr>`;
 }
 
 const avsDetailTable = createDataTable({
   tbodyId: 'avsDetailTable', searchInputId: 'avsDetailSearch', pageSizeSelectId: 'avsDetailPageSize',
   previousButtonId: 'avsDetailPreviousPage', nextButtonId: 'avsDetailNextPage', pageInfoId: 'avsDetailPageInfo', countId: 'avsDetailCount',
-  colSpan: 6, renderRow: renderAvsDetailRow, emptyMessage: 'No vulnerabilities in this category',
-  matches: (row, query) => `${row.name} ${row.cve} ${row.severity} ${row.solution}`.toLowerCase().includes(query),
+  colSpan: 7, renderRow: renderAvsDetailRow, emptyMessage: 'No vulnerabilities in this category',
+  matches: (row, query) => `${row.name} ${row.cve} ${row.severity} ${row.exploit ? 'exploit true' : 'false'} ${row.solution}`.toLowerCase().includes(query),
 });
 
 function avsMarkSelectedRow() {

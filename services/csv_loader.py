@@ -9,8 +9,9 @@ from pathlib import Path
 from models.vulnerability import Vulnerability
 from utils.calculation_utils import aging_bucket, calculate_sla, normalize_severity, normalize_status
 from utils.date_utils import parse_bool, parse_date, parse_number
-from utils.dependant_team import resolve_dependant_team
+from utils.remit_team import resolve_remit_team
 from utils.group import resolve_group
+from utils.vuln_identity import is_exploit, unique_vuln_name, vuln_count_key
 
 
 STANDARD_COLUMNS = (
@@ -31,11 +32,12 @@ PROCESSED_COLUMNS = (
     "id", "ServerName", "Operating System", "Environment", "AssetType", "AppSpaceName", "AppSpaceId",
     "AppSpaceOwner", "AppSpaceTeam", "QID", "Vulnerability Name", "Severity", "CVSS Base Score",
     "AssetRiskScore", "QDS", "CVE", "Vendor", "VendorReference", "Type", "Category", "Type Category",
-    "DependantTeam", "Group", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
+    "RemitTeam", "Group", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
     "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "SLA Breach", "Overdue",
     "Aging Bucket", "Detection", "Solution", "PatchAvailable", "ThreatIntel", "ReleaseDate",
     "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
-    "AVSScore", "AVSLevel", "AVSUniqueVulnCount", "AVS Asset Type", "AVS Zone",
+    "AVSScore", "AVSLevel", "AVSUniqueVulnCount", "FundamentalClassification", "Zone",
+    "Unique Vuln Name", "VULN COUNT", "Exploit",
 )
 DATE_COLUMNS = {"ReleaseDate", "FirstDetected", "LastDetected", "Resolved", "LastPatchAttempt", "BaselinePublished"}
 SPREADSHEET_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -169,8 +171,12 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             asset_risk_score=parse_number(_value(cleaned, "AssetRiskScore")),
             cve=_value(cleaned, "CVE") or "N/A",
             vendor=_value(cleaned, "VendorReference") or "Unknown",
-            dependant_team=(dependant_team := resolve_dependant_team(_value(cleaned, "Detection"))),
-            group=resolve_group(dependant_team),
+            threat_intel=(threat_intel := _value(cleaned, "ThreatIntel")),
+            exploit=is_exploit(threat_intel),
+            unique_vuln_name=(unique_name := unique_vuln_name(_value(cleaned, "CVE"), _value(cleaned, "VendorReference"))),
+            vuln_count=vuln_count_key(_value(cleaned, "ServerName") or "Unknown", _value(cleaned, "AppSpaceName") or "Unknown", unique_name),
+            remit_team=(remit_team := resolve_remit_team(_value(cleaned, "Detection"))),
+            group=resolve_group(remit_team),
             type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
             pci_required=bool(parse_bool(_value(cleaned, "PCIRequired"))),
             status=normalize_status(_value(cleaned, "Status")),
@@ -220,13 +226,14 @@ def processed_row(record: Vulnerability) -> dict[str, object]:
         "Solution": _value(raw, "Solution"),
         "PatchAvailable": _value(raw, "PatchAvailable"),
         "ThreatIntel": _value(raw, "ThreatIntel"),
+        "Exploit": "TRUE" if record.exploit else "FALSE",
         "ReleaseDate": _value(raw, "ReleaseDate"),
         "ResolutionInDays": _value(raw, "ResolutionInDays"),
         "ScheduledDeployment": _value(raw, "ScheduledDeployment"),
         "LastPatchAttempt": _value(raw, "LastPatchAttempt"),
         "LeaderName": _value(raw, "LeaderName"),
         "BaselinePublished": _value(raw, "BaselinePublished"),
-        "DependantTeam": record.dependant_team,
+        "RemitTeam": record.remit_team,
         "Vulnerability Age": record.age_days,
     })
     return {column: row.get(column, "") for column in PROCESSED_COLUMNS}

@@ -1,7 +1,7 @@
-"""DependantTeam to Group resolution.
+"""RemitTeam to Group resolution.
 
 The mapping lives in ``static/group_mapping.json`` so it can be updated
-without touching the code. Any ``DependantTeam`` value not present in the
+without touching the code. Any ``RemitTeam`` value not present in the
 mapping falls back to ``DEFAULT_GROUP``.
 """
 
@@ -17,7 +17,7 @@ _cache: dict[str, str] | None = None
 
 
 def load_mapping(path: Path | None = None, refresh: bool = False) -> dict[str, str]:
-    """Return the DependantTeam -> Group mapping with lower-cased keys."""
+    """Return the RemitTeam -> Group mapping with lower-cased keys."""
     global _cache
     if path is None and _cache is not None and not refresh:
         return _cache
@@ -32,10 +32,10 @@ def load_mapping(path: Path | None = None, refresh: bool = False) -> dict[str, s
     return mapping
 
 
-def resolve_group(dependant_team: str, mapping: dict[str, str] | None = None) -> str:
-    """Resolve ``dependant_team`` to its Group, defaulting to ``Suncorp Group``."""
+def resolve_group(remit_team: str, mapping: dict[str, str] | None = None) -> str:
+    """Resolve ``remit_team`` to its Group, defaulting to ``Suncorp Group``."""
     rules = load_mapping() if mapping is None else mapping
-    text = (dependant_team or "").strip().lower()
+    text = (remit_team or "").strip().lower()
     if not text:
         return DEFAULT_GROUP
     return rules.get(text) or DEFAULT_GROUP

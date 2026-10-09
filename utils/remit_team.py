@@ -1,6 +1,6 @@
-"""Detection keyword to DependantTeam resolution.
+"""Detection keyword to RemitTeam resolution.
 
-The keyword rules live in ``static/dependant_team_mapping.json`` so they can be
+The keyword rules live in ``static/remit_team_mapping.json`` so they can be
 updated without touching the code.
 """
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-MAPPING_PATH = BASE_DIR / "static" / "dependant_team_mapping.json"
-DEFAULT_DEPENDANT_TEAM = "Other"
+MAPPING_PATH = BASE_DIR / "static" / "remit_team_mapping.json"
+DEFAULT_REMIT_TEAM = "Other"
 
 _cache: dict[str, str] | None = None
 
@@ -31,7 +31,7 @@ def load_mapping(path: Path | None = None, refresh: bool = False) -> dict[str, s
     return mapping
 
 
-def resolve_dependant_team(detection: str, mapping: dict[str, str] | None = None) -> str:
+def resolve_remit_team(detection: str, mapping: dict[str, str] | None = None) -> str:
     """Match ``detection`` against the keyword rules, case-insensitively.
 
     When several keywords match, the longest (most specific) keyword wins.
@@ -39,9 +39,9 @@ def resolve_dependant_team(detection: str, mapping: dict[str, str] | None = None
     rules = load_mapping() if mapping is None else mapping
     text = (detection or "").strip().lower()
     if not text:
-        return DEFAULT_DEPENDANT_TEAM
+        return DEFAULT_REMIT_TEAM
     matches = [keyword for keyword in rules if keyword and keyword in text]
     if not matches:
-        return DEFAULT_DEPENDANT_TEAM
+        return DEFAULT_REMIT_TEAM
     best = max(matches, key=len)
-    return rules[best] or DEFAULT_DEPENDANT_TEAM
+    return rules[best] or DEFAULT_REMIT_TEAM

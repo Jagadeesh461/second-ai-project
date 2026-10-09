@@ -29,7 +29,7 @@ def make_record(**overrides):
         "Severity": "Critical",
         "CVE": "CVE-2026-0001",
         "Vendor": "Acme",
-        "DependantTeam": "Change/ITO",
+        "RemitTeam": "Change/ITO",
         "Group": "Suncorp Bank",
         "Type Category": "Patch",
         "Status": "Open",
@@ -40,8 +40,8 @@ def make_record(**overrides):
         "Days Overdue": 60,
         "SLA Breach": True,
         "Overdue": True,
-        "AVS Asset Type": "Other",
-        "AVS Zone": "Internal",
+        "FundamentalClassification": "Other",
+        "Zone": "Internal",
     }
     record.update(overrides)
     return record
@@ -49,10 +49,10 @@ def make_record(**overrides):
 
 def sample_records():
     return [
-        make_record(ServerName="SRV-1", DependantTeam="Change/ITO", Group="Suncorp Bank", CVE="CVE-2026-0001"),
-        make_record(ServerName="SRV-2", DependantTeam="Change/ITO", Group="Suncorp Bank", CVE="CVE-2026-0002"),
-        make_record(ServerName="SRV-3", DependantTeam="Wintel", Group="Suncorp Group", CVE="CVE-2026-0003"),
-        make_record(ServerName="SRV-4", DependantTeam="Dynatrace", Group="Suncorp Group", CVE="CVE-2026-0004"),
+        make_record(ServerName="SRV-1", RemitTeam="Change/ITO", Group="Suncorp Bank", CVE="CVE-2026-0001"),
+        make_record(ServerName="SRV-2", RemitTeam="Change/ITO", Group="Suncorp Bank", CVE="CVE-2026-0002"),
+        make_record(ServerName="SRV-3", RemitTeam="Wintel", Group="Suncorp Group", CVE="CVE-2026-0003"),
+        make_record(ServerName="SRV-4", RemitTeam="Dynatrace", Group="Suncorp Group", CVE="CVE-2026-0004"),
     ]
 
 

@@ -1,4 +1,4 @@
-AppSpaceId,AppSpaceName,AppSpaceTeam,AssetType,Zone
+AppSpaceId,AppSpaceName,AppSpaceTeam,FundamentalClassification,Zone
 AS-00001,Customer Portal,Digital Platforms,Essential,External
 AS-00002,Claims Processing,Claims Technology,Other,Internal
 AS-00003,Payment Gateway Hub,Payments Engineering,Essential,External
