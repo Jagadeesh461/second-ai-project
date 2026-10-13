@@ -140,6 +140,7 @@ function assistantExtractFilters(query, records) {
 // being part of the "Top 10 vulnerable AppSpaces" question's keywords).
 function assistantResolveIntent(text, fieldFilters) {
   const query = String(text || '').toLowerCase().trim();
+  if (/\bmost\s+risky\b|\briskiest\s+vulnerabilit/.test(query)) return 'most-risky';
   if (!query) return null;
   if (/\bhow many\b/.test(query) || /\btotal\b/.test(query) || /\bcount\b/.test(query)) return 'count';
   if (/\boldest\b/.test(query) && /\bopen\b/.test(query)) return 'oldest-open';
@@ -147,6 +148,41 @@ function assistantResolveIntent(text, fieldFilters) {
   if (/\bavs\b/.test(query) && /\bsummary\b/.test(query)) return 'avs-summary';
   if (/\bcompar/.test(query)) return 'comparison';
   return assistantMatchQuestion(assistantStripFieldFilterText(text, fieldFilters));
+}
+
+function assistantMostRiskyRecords(records) {
+  const unique = {};
+  records.forEach(record => {
+    if (!['4', '5'].includes(String(record['Severity Level'] || '')) ||
+        record.RemitTeam !== 'Change/ITO' ||
+        !['Essential', 'Fundamental'].includes(record.FundamentalClassification) ||
+        !assistantIsTrue(record.PatchAvailable) || !assistantIsTrue(record.SIABreach) ||
+        record.Zone !== 'External' || !assistantIsExploit(record) ||
+        !record['VULN COUNT'] || unique[record['VULN COUNT']]) return;
+    unique[record['VULN COUNT']] = record;
+  });
+  return Object.keys(unique).map(key => unique[key]);
+}
+
+function assistantIsTrue(value) {
+  return value === true || String(value).trim().toUpperCase() === 'TRUE';
+}
+
+function assistantMostRiskyAnswer(records) {
+  const risky = assistantMostRiskyRecords(records);
+  const apps = assistantTopEntries(assistantCountBy(risky, r => r.AppSpaceName), 10);
+  return {
+    id: 'most-risky',
+    title: 'Most Risky Vulnerabilities',
+    summary: `${assistantNumber(risky.length)} unique Most Risky Vulnerabilities match the current criteria.`,
+    stats: [
+      { label: 'Total', value: assistantNumber(risky.length) },
+      { label: 'Applications', value: assistantNumber(new Set(risky.map(r => r.AppSpaceName)).size) },
+      { label: 'Average age', value: `${risky.length ? Math.round(risky.reduce((sum, r) => sum + Number(r['Vulnerability Age'] || r['Days Open'] || 0), 0) / risky.length) : 0} days` },
+    ],
+    items: apps.map(([name, count]) => ({ label: name, value: `${assistantNumber(count)} findings` })),
+    notes: ['Criteria: severity 4/5, Change/ITO, Essential/Fundamental, PatchAvailable, SIABreach, External and Exploit.'],
+  };
 }
 
 function assistantEscapeRegExp(value) {
@@ -563,6 +599,7 @@ const ASSISTANT_ANSWER_BUILDERS = {
   'oldest-open': assistantOldestOpenAnswer,
   'avs-summary': assistantAvsSummaryAnswer,
   'comparison': assistantComparisonAnswer,
+  'most-risky': assistantMostRiskyAnswer,
 };
 
 // Some intents already apply their own filtering as part of the answer they

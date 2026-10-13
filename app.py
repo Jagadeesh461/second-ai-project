@@ -23,7 +23,7 @@ def get_dashboard_data():
     try:
         return load_cached_dashboard(), None
     except (FileNotFoundError, ValueError, OSError) as error:
-        return {"meta": {"record_count": 0}, "kpis": {}, "filters": {}, "charts": {}, "records": [], "critical_records": [], "app_matrix": [], "top_servers": [], "top_cves": [], "top_qids": [], "avs": {"applications": [], "totals": {"total": 0, "low": 0, "medium": 0, "high": 0}}}, str(error)
+        return {"meta": {"record_count": 0}, "kpis": {}, "filters": {}, "charts": {}, "records": [], "critical_records": [], "most_risky_records": [], "app_matrix": [], "top_servers": [], "top_cves": [], "top_qids": [], "avs": {"applications": [], "totals": {"total": 0, "low": 0, "medium": 0, "high": 0}}}, str(error)
 
 
 @app.get("/")

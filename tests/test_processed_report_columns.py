@@ -126,6 +126,24 @@ class ProcessedReportColumnTests(unittest.TestCase):
         # Two findings share SRV-1 + Payments + CVE, so only two distinct VULN COUNT values exist.
         self.assertEqual(dashboard["kpis"]["unique_vuln_instances"], 2)
 
+    def test_dashboard_builds_unique_most_risky_records_from_all_criteria(self):
+        records = self.load([
+            {
+                "Severity": "4", "Detection": "/apps/java", "PatchAvailable": "TRUE",
+                "SIABreach": "TRUE", "ThreatIntel": "Exploit Available",
+            },
+            {
+                "Severity": "4", "Detection": "/apps/java", "PatchAvailable": "TRUE",
+                "SIABreach": "TRUE", "ThreatIntel": "Exploit Available", "QID": "duplicate",
+            },
+            {"Severity": "5", "Detection": "/apps/java", "PatchAvailable": "FALSE", "SIABreach": "TRUE", "ThreatIntel": "Exploit Available"},
+        ])
+        avs_calculator.attach_avs_to_records(records, _per_app(records))
+        dashboard = service.build_dashboard(records, {})
+        self.assertEqual(len(dashboard["most_risky_records"]), 1)
+        self.assertEqual(dashboard["most_risky_records"][0]["Severity Level"], "4")
+        self.assertEqual(dashboard["most_risky_records"][0]["SIABreach"], True)
+
 
 def _per_app(records):
     mapping = avs_calculator.pd.DataFrame([

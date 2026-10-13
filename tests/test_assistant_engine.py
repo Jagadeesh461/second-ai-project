@@ -104,6 +104,25 @@ def high_avs_records():
     return records
 
 
+def most_risky_records():
+    base = make_record(
+        **{
+            "Severity Level": "5",
+            "RemitTeam": "Change/ITO",
+            "FundamentalClassification": "Essential",
+            "PatchAvailable": "TRUE",
+            "SIABreach": "TRUE",
+            "Zone": "External",
+            "Exploit": "TRUE",
+            "VULN COUNT": "SRV-1Customer PortalCVE-1",
+            "Vulnerability Age": 120,
+        }
+    )
+    duplicate = dict(base, ServerName="SRV-2")
+    excluded = dict(base, **{"VULN COUNT": "excluded", "PatchAvailable": "FALSE"})
+    return [base, duplicate, excluded]
+
+
 def ask(question, records, filters=None, search=""):
     return run_js(
         "answerAssistantQuestion(CONTEXT.question, CONTEXT)",
@@ -151,6 +170,12 @@ class PredefinedQuestionTests(unittest.TestCase):
 
 
 class FilteredDataAnswerTests(unittest.TestCase):
+    def test_most_risky_answer_deduplicates_by_vuln_count(self):
+        answer = ask("count most risky vulnerabilities", most_risky_records())
+        self.assertEqual(answer["id"], "most-risky")
+        self.assertIn("1 unique Most Risky Vulnerabilities", answer["summary"])
+        self.assertEqual(answer["stats"][0]["value"], "1")
+
     def test_summary_counts_come_from_the_supplied_records(self):
         answer = ask("Summarize vulnerability report", sample_records())
         stats = {stat["label"]: stat["value"] for stat in answer["stats"]}

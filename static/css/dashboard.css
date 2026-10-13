@@ -627,6 +627,42 @@ body {
   min-height: 360px;
 }
 
+.most-risky-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.most-risky-grid .chart-panel {
+  min-height: 300px;
+  height: 100%;
+}
+
+.risky-summary {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  height: calc(100% - 54px);
+}
+
+.risky-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.risky-summary-item span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.risky-summary-item strong {
+  color: var(--ink);
+  font-size: 24px;
+}
+
 .avs-row-clickable {
   cursor: pointer;
 }
@@ -1495,6 +1531,7 @@ footer {
   }
 
   .avs-chart-grid,
+  .most-risky-grid,
   .avs-drilldown-grid,
   .exposure-chart-grid,
   .hotspot-grid,
