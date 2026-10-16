@@ -58,7 +58,7 @@ class ImportWorkflowTests(unittest.TestCase):
                 "FirstDetected": "2026-09-01",
                 "LastDetected": "2026-09-12",
                 "Resolved": "",
-                "SIABreach": "no",
+                "SLABreach": "no",
                 "Status": "Open",
                 "CVSS3Temporal": "8.1",
             }
@@ -106,7 +106,7 @@ class ImportWorkflowTests(unittest.TestCase):
                 "FirstDetected": "15-06-2026",
                 "LastDetected": "46274",
                 "Resolved": "",
-                "SIABreach": "no",
+                "SLABreach": "no",
                 "Status": "In Progress",
             }
         )
@@ -150,6 +150,25 @@ class ImportWorkflowTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "FirstDetected"):
             service.process_latest_report(force=True)
+
+    def test_legacy_siabreach_column_accepted_as_alias(self):
+        path = self.data_dir / "legacy_sia.csv"
+        columns = [("SIABreach" if col == "SLABreach" else col) for col in csv_loader.STANDARD_COLUMNS]
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=columns)
+            writer.writeheader()
+            row = {col: "test" for col in columns}
+            row["FirstDetected"] = "2026-09-01"
+            row["LastDetected"] = "2026-09-12"
+            row["SIABreach"] = "TRUE"
+            writer.writerow(row)
+
+        result = service.process_latest_report(force=True)
+        self.assertTrue(result["processed"])
+        with service.PROCESSED_REPORT_PATH.open("r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertIn("SLABreach", rows[0])
+        self.assertEqual(rows[0]["SLABreach"], "TRUE")
 
     def test_workbook_named_csv_is_processed(self):
         self.write_standard_workbook(self.data_dir / "report.csv")

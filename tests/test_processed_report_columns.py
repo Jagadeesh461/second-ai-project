@@ -57,7 +57,7 @@ class ProcessedReportColumnTests(unittest.TestCase):
                     "AppSpaceId": "AS-1", "AppSpaceName": "Payments", "AppSpaceTeam": "Team", "QID": str(index),
                     "VulnerabilityName": "Java RCE", "Severity": "5", "AssetRiskScore": "50", "PCIRequired": "no",
                     "Category": "Java", "CVE": "CVE-2026-0001", "VendorReference": "KB-1", "ThreatIntel": "",
-                    "FirstDetected": "2026-01-01", "LastDetected": "2026-03-31", "Resolved": "", "SIABreach": "no",
+                    "FirstDetected": "2026-01-01", "LastDetected": "2026-03-31", "Resolved": "", "SLABreach": "no",
                     "Status": "Open",
                 })
                 row.update(updates)
@@ -74,7 +74,10 @@ class ProcessedReportColumnTests(unittest.TestCase):
             self.assertIn(name, columns)
         for old in ("AVS Asset Type", "AVS Zone", "DependantTeam"):
             self.assertNotIn(old, columns)
-        self.assertEqual(columns[-3:], ("Unique Vuln Name", "VULN COUNT", "Exploit"))
+        self.assertEqual(columns[-7:], (
+            "ITORresponsiblePartner", "ThirdPartyComponent", "ThirdPartyComponentName",
+            "CoveredInWintelCoreBaseline", "PatchAvailableNewMetric", "CVSS2Temporal", "CVSS3Temporal",
+        ))
 
     def test_record_fields(self):
         records = self.load([
@@ -125,6 +128,24 @@ class ProcessedReportColumnTests(unittest.TestCase):
         self.assertEqual(dashboard["kpis"]["exploitable"], 1)
         # Two findings share SRV-1 + Payments + CVE, so only two distinct VULN COUNT values exist.
         self.assertEqual(dashboard["kpis"]["unique_vuln_instances"], 2)
+
+    def test_dashboard_builds_unique_most_risky_records_from_all_criteria(self):
+        records = self.load([
+            {
+                "Severity": "4", "Detection": "/apps/java", "PatchAvailable": "TRUE",
+                "SLABreach": "TRUE", "ThreatIntel": "Exploit Available",
+            },
+            {
+                "Severity": "4", "Detection": "/apps/java", "PatchAvailable": "TRUE",
+                "SLABreach": "TRUE", "ThreatIntel": "Exploit Available", "QID": "duplicate",
+            },
+            {"Severity": "5", "Detection": "/apps/java", "PatchAvailable": "FALSE", "SLABreach": "TRUE", "ThreatIntel": "Exploit Available"},
+        ])
+        avs_calculator.attach_avs_to_records(records, _per_app(records))
+        dashboard = service.build_dashboard(records, {})
+        self.assertEqual(len(dashboard["most_risky_records"]), 1)
+        self.assertEqual(dashboard["most_risky_records"][0]["Severity Level"], "4")
+        self.assertEqual(dashboard["most_risky_records"][0]["SLABreach"], True)
 
 
 def _per_app(records):

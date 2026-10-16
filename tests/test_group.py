@@ -75,7 +75,7 @@ class GroupLoaderTests(unittest.TestCase):
                         "FirstDetected": "2026-01-01",
                         "LastDetected": "2026-01-31",
                         "Resolved": "",
-                        "SIABreach": "no",
+                        "SLABreach": "no",
                         "Status": "Open",
                     }
                 )
@@ -138,7 +138,7 @@ class GroupDashboardTests(unittest.TestCase):
                         "FirstDetected": "2026-01-01",
                         "LastDetected": "2026-01-11",
                         "Resolved": "",
-                        "SIABreach": "no",
+                        "SLABreach": "no",
                         "Status": "Open",
                         "Detection": detection,
                     }

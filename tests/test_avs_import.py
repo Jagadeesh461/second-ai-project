@@ -98,7 +98,7 @@ class AvsImportWorkflowTests(unittest.TestCase):
                 "FirstDetected": "2026-09-01",
                 "LastDetected": "2026-09-12",
                 "Resolved": "",
-                "SIABreach": "no",
+                "SLABreach": "no",
                 "Status": "Open",
                 "CVSS3Temporal": "8.1",
             }

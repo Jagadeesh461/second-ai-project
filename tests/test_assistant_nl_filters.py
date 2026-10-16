@@ -35,7 +35,7 @@ def make_record(**overrides):
         "Vulnerability Age": 90,
         "Days Open": 90,
         "Days Overdue": 60,
-        "SLA Breach": True,
+        "SLABreach": True,
         "Overdue": True,
         "FundamentalClassification": "Other",
         "Zone": "Internal",
@@ -57,17 +57,17 @@ def mixed_records():
         records.append(make_record(
             ServerName=f"SRV-B{index}", AppSpaceName="Trading Gateway", AppSpaceId="AS-TRD",
             AppSpaceOwner="Aisha Khan", AppSpaceTeam="Markets", CVE=f"CVE-2026-20{index}",
-            Severity="High", Environment="Staging", **{"SLA Breach": False, "Overdue": False},
+            Severity="High", Environment="Staging", **{"SLABreach": False, "Overdue": False},
         ))
     records.append(make_record(
         ServerName="SRV-C0", AppSpaceName="Intranet", AppSpaceId="AS-INT",
         AppSpaceOwner="Ravi Sharma", AppSpaceTeam="Digital Team", CVE="CVE-2026-3000",
-        Severity="Medium", Environment="Production", **{"SLA Breach": True, "Overdue": True},
+        Severity="Medium", Environment="Production", **{"SLABreach": True, "Overdue": True},
     ))
     records.append(make_record(
         ServerName="SRV-C1", AppSpaceName="Intranet", AppSpaceId="AS-INT",
         AppSpaceOwner="Ravi Sharma", AppSpaceTeam="Digital Team", CVE="CVE-2026-3001",
-        Severity="Low", Environment="Production", Status="Resolved", **{"SLA Breach": False, "Overdue": False},
+        Severity="Low", Environment="Production", Status="Resolved", **{"SLABreach": False, "Overdue": False},
     ))
     return records
 

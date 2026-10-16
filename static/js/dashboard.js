@@ -20,7 +20,7 @@ function isExploit(record) {
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
 function buildFilteredCsv(records) {
-  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'Unique Vuln Name', 'VULN COUNT', 'ThreatIntel', 'Exploit', 'RemitTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLA Breach', 'Overdue', 'Aging Bucket', 'FundamentalClassification', 'Zone'];
+  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'Unique Vuln Name', 'VULN COUNT', 'ThreatIntel', 'Exploit', 'RemitTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLABreach', 'Overdue', 'Aging Bucket', 'FundamentalClassification', 'Zone'];
   const cellValue = (record, column) => (column === 'Exploit' ? (isExploit(record) ? 'TRUE' : 'FALSE') : record[column]);
   return [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(cellValue(record, column))).join(','))].join('\r\n');
 }
@@ -135,7 +135,7 @@ function renderKpis(records) {
     ['Critical Overdue', count(r => r.Overdue && r.Severity === 'Critical'), '!', 'kpi-critical'],
     ['Open Vulnerabilities', count(r => r.Status === 'Open'), '○', 'kpi-warning'],
     ['Resolved Vulnerabilities', count(r => r.Status === 'Resolved'), '✓', 'kpi-good'],
-    ['SLA Breached', count(r => r['SLA Breach']), '!', 'kpi-critical'],
+    ['SLA Breached', count(r => r.SLABreach), '!', 'kpi-critical'],
     ['Assets Affected', new Set(records.map(r => r.ServerName)).size, '◇'],
     ['Unique Servers', new Set(records.map(r => r.ServerName)).size, '⌁'],
     ['Applications', new Set(records.map(r => r.AppSpaceName)).size, '▦'],
@@ -158,7 +158,7 @@ function renderCharts(records) {
   const statusValues = Object.fromEntries(statuses.map(status => [status, Object.fromEntries(groups.map(s => [s, records.filter(r => r.Severity === s && r.Status === status).length]))]));
   groupedBars($('statusChart'), groups, statuses, statuses.map(s => COLORS[s]), Math.max(...Object.values(statusValues).flatMap(Object.values), 1), statusValues);
 
-  const slaValues = { 'Within SLA': Object.fromEntries(groups.map(s => [s, records.filter(r => r.Severity === s && !r['SLA Breach']).length])), 'SLA Breached': Object.fromEntries(groups.map(s => [s, records.filter(r => r.Severity === s && r['SLA Breach']).length])) };
+  const slaValues = { 'Within SLA': Object.fromEntries(groups.map(s => [s, records.filter(r => r.Severity === s && !r.SLABreach).length])), 'SLA Breached': Object.fromEntries(groups.map(s => [s, records.filter(r => r.Severity === s && r.SLABreach).length])) };
   groupedBars($('slaChart'), groups, Object.keys(slaValues), ['#2f9d6c', '#d43a2c'], Math.max(...Object.values(slaValues).flatMap(Object.values), 1), slaValues);
 
   const ages = ['0-7 Days', '8-30 Days', '31-60 Days', '61-90 Days', '91-180 Days', '181-365 Days', '365+ Days'];
@@ -200,7 +200,7 @@ function computeMatrixRows(records) {
       team: rs[0]?.AppSpaceTeam || 'Unknown',
       values: Object.fromEntries(['Critical', 'High', 'Medium', 'Low'].map(s => [s, rs.filter(r => r.Severity === s).length])),
       overdue: rs.filter(r => r.Overdue).length,
-      breach: rs.filter(r => r['SLA Breach']).length,
+      breach: rs.filter(r => r.SLABreach).length,
     };
   }).sort((a, b) => Object.values(b.values).reduce((x, y) => x + y, 0) - Object.values(a.values).reduce((x, y) => x + y, 0));
 }
@@ -212,11 +212,132 @@ function renderMatrixRow(row) {
 function badge(value, type) { return `<span class="${type}-badge ${type}-${String(value).replaceAll(' ', '-')}">${esc(value || 'Unknown')}</span>`; }
 
 function computeCriticalRows(records) {
-  return records.filter(r => r.Severity === 'Critical').sort((a, b) => Number(b['SLA Breach']) - Number(a['SLA Breach']) || b['Days Open'] - a['Days Open']);
+  return records.filter(r => r.Severity === 'Critical').sort((a, b) => Number(b.SLABreach) - Number(a.SLABreach) || b['Days Open'] - a['Days Open']);
+}
+
+function isTrue(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0 || value === null || value === undefined) return false;
+  const s = String(value).trim().toUpperCase();
+  return s === 'TRUE' || s === '1' || s === 'YES' || s === 'T' || s === 'Y';
+}
+
+function computeMostRiskyRows(records) {
+  const unique = new Map();
+  records.forEach(record => {
+    if (!['4', '5'].includes(String(record['Severity Level'] || '')) ||
+        !['Essential', 'Fundamental'].includes(record.FundamentalClassification) ||
+        !isTrue(record.PatchAvailable) || !isTrue(record.SLABreach ?? record.SIABreach) ||
+        record.Zone !== 'External' || !isTrue(record.Exploit) ||
+        !record['VULN COUNT'] || unique.has(record['VULN COUNT'])) return;
+    unique.set(record['VULN COUNT'], record);
+  });
+  return [...unique.values()].sort((a, b) => Number(b['Days Open'] || 0) - Number(a['Days Open'] || 0));
+}
+
+function renderMostRiskyRow(r) {
+  return `<tr><td>${esc(r['VULN COUNT'])}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r['Type Category'] || r.Category || 'Unknown')}</td><td>${esc(r['Severity Level'] || r.Severity)}</td><td>${esc(r.RemitTeam)}</td><td>${isTrue(r.PatchAvailable) ? 'TRUE' : 'FALSE'}</td><td>${isTrue(r.SLABreach ?? r.SIABreach) ? 'TRUE' : 'FALSE'}</td><td>${isTrue(r.Exploit) ? 'TRUE' : 'FALSE'}</td><td>${r['Vulnerability Age'] || 0}d</td></tr>`;
+}
+
+function renderMostRiskyCharts(records) {
+  const total = records.length;
+  const uniqueApps = new Set(records.map(r => r.AppSpaceName).filter(Boolean)).size;
+  const averageAge = total ? Math.round(records.reduce((sum, r) => sum + Number(r['Vulnerability Age'] || r['Days Open'] || 0), 0) / total) : 0;
+  $('mostRiskySummary').innerHTML = [
+    ['Total Most Risky Vulnerabilities', total],
+    ['Unique Applications', uniqueApps],
+    ['Average Age', `${averageAge} days`],
+  ].map(([label, value]) => `<div class="risky-summary-item"><span>${label}</span><strong>${Number.isFinite(value) ? value.toLocaleString() : value}</strong></div>`).join('');
+
+  const categoryCounts = {};
+  records.forEach(r => { const key = r['Type Category'] || r.Category || 'Unknown'; categoryCounts[key] = (categoryCounts[key] || 0) + 1; });
+  const categoryColors = paletteColorMap(Object.keys(categoryCounts));
+  donut($('mostRiskyCategoryChart'), categoryCounts, categoryColors);
+  $('mostRiskyCategoryLegend').innerHTML = Object.entries(categoryCounts).map(([key, value]) => `<span class="legend-item"><i class="legend-dot" style="background:${categoryColors[key]}"></i>${esc(key)} ${value} (${assistantPercent(value, total)})</span>`).join('') || '<span class="muted">No data</span>';
+
+  const appCounts = {};
+  records.forEach(r => { appCounts[r.AppSpaceName] = (appCounts[r.AppSpaceName] || 0) + 1; });
+  horizontalBars($('mostRiskyApplicationChart'), Object.entries(appCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, count]) => ({ name, total: count })), '#f2661e');
+}
+
+function renderMostRiskyDebug(recordsInScope) {
+  const host = $('mostRiskyDebugPanel');
+  if (!host) return;
+  const all = recordsInScope || [];
+  const total = all.length;
+
+  // Individual rule counts
+  const cSeverity = all.filter(r => ['4', '5'].includes(String(r['Severity Level'] || ''))).length;
+  const cClassification = all.filter(r => ['Essential', 'Fundamental'].includes(r.FundamentalClassification)).length;
+  const cPatch = all.filter(r => isTrue(r.PatchAvailable)).length;
+  const cSla = all.filter(r => isTrue(r.SLABreach ?? r.SIABreach)).length;
+  const cZone = all.filter(r => r.Zone === 'External').length;
+  const cExploit = all.filter(r => isTrue(r.Exploit)).length;
+
+  // Cumulative steps
+  const s1 = all.filter(r => ['4', '5'].includes(String(r['Severity Level'] || '')));
+  const s3 = s1.filter(r => ['Essential', 'Fundamental'].includes(r.FundamentalClassification));
+  const s4 = s3.filter(r => isTrue(r.PatchAvailable));
+  const s5 = s4.filter(r => isTrue(r.SLABreach ?? r.SIABreach));
+  const s6 = s5.filter(r => r.Zone === 'External');
+  const s7 = s6.filter(r => isTrue(r.Exploit));
+
+  const uniqueMap = new Map();
+  s7.forEach(r => { if (r['VULN COUNT'] && !uniqueMap.has(r['VULN COUNT'])) uniqueMap.set(r['VULN COUNT'], r); });
+  const finalCount = uniqueMap.size;
+
+  let reasonHtml = '';
+  if (finalCount === 0) {
+    let bottleneck = 'No records in active scope.';
+    if (total > 0) {
+      if (s1.length === 0) bottleneck = 'Eliminated at Step 1: No records have Severity 4 or 5.';
+      else if (s3.length === 0) bottleneck = 'Eliminated at Step 2: No Severity 4/5 records match FundamentalClassification in ("Essential", "Fundamental").';
+      else if (s4.length === 0) bottleneck = 'Eliminated at Step 3: No records have PatchAvailable = TRUE (or 1).';
+      else if (s5.length === 0) bottleneck = 'Eliminated at Step 4: No records have SLABreach = TRUE.';
+      else if (s6.length === 0) bottleneck = 'Eliminated at Step 5: No records have Zone = "External".';
+      else if (s7.length === 0) bottleneck = 'Eliminated at Step 6: No records have Exploit = TRUE.';
+      else bottleneck = 'Eliminated at Step 6: VULN COUNT deduplication or missing VULN COUNT keys.';
+    }
+    reasonHtml = `<div class="risky-debug-reason"><strong>Reason for 0 count:</strong> ${esc(bottleneck)}</div>`;
+  }
+
+  host.innerHTML = `
+    <div class="risky-debug-head">
+      <h4>Most Risky Vulnerabilities Logic Validation (Debug Mode)</h4>
+      <span class="risky-debug-tag">${finalCount} Active Unique Findings</span>
+    </div>
+    <div class="risky-debug-grid">
+      <div class="risky-debug-col">
+        <h5>1. Individual Rule Breakdown (in scope)</h5>
+        <ul class="risky-debug-list">
+          <li><span>1. Total Records</span><strong>${total.toLocaleString()}</strong></li>
+          <li><span>2. Severity 4 or 5</span><strong>${cSeverity.toLocaleString()}</strong></li>
+          <li><span>3. FundamentalClassification = Essential/Fundamental</span><strong>${cClassification.toLocaleString()}</strong></li>
+          <li><span>4. PatchAvailable = TRUE</span><strong>${cPatch.toLocaleString()}</strong></li>
+          <li><span>5. SLABreach = TRUE</span><strong>${cSla.toLocaleString()}</strong></li>
+          <li><span>6. Zone = External</span><strong>${cZone.toLocaleString()}</strong></li>
+          <li><span>7. Exploit = TRUE</span><strong>${cExploit.toLocaleString()}</strong></li>
+        </ul>
+      </div>
+      <div class="risky-debug-col">
+        <h5>2. Cumulative Filtering Steps</h5>
+        <ul class="risky-debug-list">
+          <li><span>Step 1: Severity 4/5</span><strong>${s1.length.toLocaleString()}</strong></li>
+          <li class="${s3.length === 0 ? 'debug-step-eliminated' : ''}"><span>Step 2: + FundamentalClassification</span><strong>${s3.length.toLocaleString()}</strong></li>
+          <li class="${s4.length === 0 ? 'debug-step-eliminated' : ''}"><span>Step 3: + PatchAvailable</span><strong>${s4.length.toLocaleString()}</strong></li>
+          <li class="${s5.length === 0 ? 'debug-step-eliminated' : ''}"><span>Step 4: + SLABreach</span><strong>${s5.length.toLocaleString()}</strong></li>
+          <li class="${s6.length === 0 ? 'debug-step-eliminated' : ''}"><span>Step 5: + Zone (External)</span><strong>${s6.length.toLocaleString()}</strong></li>
+          <li class="${s7.length === 0 ? 'debug-step-eliminated' : ''}"><span>Step 6: + Exploit (All criteria)</span><strong>${s7.length.toLocaleString()}</strong></li>
+          <li class="debug-step-final"><span>Final: Unique VULN COUNT</span><strong>${finalCount.toLocaleString()}</strong></li>
+        </ul>
+      </div>
+    </div>
+    ${reasonHtml}
+  `;
 }
 
 function renderCriticalRow(r) {
-  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Vulnerability Name'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${r['Days Open']}d</td><td>${r['SLA Due Date'] || 'Unknown'}</td><td>${r['SLA Breach'] ? '<span class="sla-badge">Breached</span>' : badge(r.Status, 'status')}</td></tr>`;
+  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Vulnerability Name'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${r['Days Open']}d</td><td>${r['SLA Due Date'] || 'Unknown'}</td><td>${r.SLABreach ? '<span class="sla-badge">Breached</span>' : badge(r.Status, 'status')}</td></tr>`;
 }
 
 function rankList(id, records, key) {
@@ -226,7 +347,7 @@ function rankList(id, records, key) {
 }
 
 function renderRegisterRow(r) {
-  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.RemitTeam || 'Other')}</td><td>${esc(r.Group || 'Suncorp Group')}</td><td>${esc(r.QID)}</td><td>${esc(r['Unique Vuln Name'] || '-')}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${isExploit(r) ? '<span class="sla-badge">TRUE</span>' : 'FALSE'}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r['SLA Breach'] ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
+  return `<tr><td>${esc(r.ServerName)}</td><td>${esc(r['Operating System'])}</td><td>${esc(r.Environment)}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r.RemitTeam || 'Other')}</td><td>${esc(r.Group || 'Suncorp Group')}</td><td>${esc(r.QID)}</td><td>${esc(r['Unique Vuln Name'] || '-')}</td><td title="${esc(r['Vulnerability Name'])}">${esc(String(r['Vulnerability Name']).slice(0, 30))}</td><td>${badge(r.Severity, 'severity')}</td><td>${isExploit(r) ? '<span class="sla-badge">TRUE</span>' : 'FALSE'}</td><td>${r['CVSS Base Score'] ?? '-'}</td><td>${r['First Detected'] || '-'}</td><td>${r['Days Open']}d</td><td>${r.SLABreach ? '<span class="sla-badge">' + (r['Days Overdue'] || 0) + 'd late</span>' : `<span class="ok">${r['SLA Due Date'] || '-'}</span>`}</td><td>${badge(r.Status, 'status')}</td></tr>`;
 }
 
 function recordSearchText(record) { return JSON.stringify(record).toLowerCase(); }
@@ -245,6 +366,13 @@ const criticalTable = createDataTable({
   matches: (row, query) => recordSearchText(row).includes(query),
 });
 
+const mostRiskyTable = createDataTable({
+  tbodyId: 'mostRiskyTable', searchInputId: 'mostRiskySearch', pageSizeSelectId: 'mostRiskyPageSize',
+  previousButtonId: 'mostRiskyPreviousPage', nextButtonId: 'mostRiskyNextPage', pageInfoId: 'mostRiskyPageInfo', countId: 'mostRiskyCount',
+  colSpan: 9, renderRow: renderMostRiskyRow, emptyMessage: 'No Most Risky Vulnerabilities match the current scope',
+  matches: (row, query) => recordSearchText(row).includes(query),
+});
+
 const matrixTable = createDataTable({
   tbodyId: 'matrixTable', searchInputId: 'matrixSearch', pageSizeSelectId: 'matrixPageSize',
   previousButtonId: 'matrixPreviousPage', nextButtonId: 'matrixNextPage', pageInfoId: 'matrixPageInfo', countId: 'matrixCount',
@@ -259,11 +387,37 @@ function render() {
   renderAvs(filteredRecords);
   matrixTable.update(computeMatrixRows(filteredRecords));
   criticalTable.update(computeCriticalRows(filteredRecords));
+  const mostRisky = computeMostRiskyRows(filteredRecords);
+  mostRiskyTable.update(mostRisky);
+  renderMostRiskyCharts(mostRisky);
+  renderMostRiskyDebug(filteredRecords);
   rankList('cveList', filteredRecords, 'CVE');
   rankList('qidList', filteredRecords, 'QID');
   const pci = filteredRecords.filter(r => r['PCI Required']);
-  $('pciMetric').innerHTML = `<div><div class="compliance-number">${pci.length}</div><div class="compliance-label">required findings <span class="footer-separator">•</span> ${pci.filter(r => r['SLA Breach']).length} breached</div></div>`;
+  $('pciMetric').innerHTML = `<div><div class="compliance-number">${pci.length}</div><div class="compliance-label">required findings <span class="footer-separator">•</span> ${pci.filter(r => r.SLABreach).length} breached</div></div>`;
   registerTable.update(filteredRecords);
+}
+
+function exportMostRisky(records, format) {
+  const columns = Object.keys(data.records?.[0] || {});
+  const csv = [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(record[column])).join(','))].join('\r\n');
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  if (format === 'excel') {
+    const cell = value => String(value ?? '').replaceAll('\t', ' ').replaceAll('\r', ' ').replaceAll('\n', ' ');
+    const tsv = [columns.join('\t'), ...records.map(record => columns.map(column => cell(record[column])).join('\t'))].join('\r\n');
+    downloadBlob(`\ufeff${tsv}`, 'application/vnd.ms-excel;charset=utf-8;', `most_risky_vulnerabilities_${dateStamp}.xls`);
+  } else {
+    exportFilteredRecordsCsv(csv, `most_risky_vulnerabilities_${dateStamp}.csv`);
+  }
+}
+
+async function exportFilteredRecordsCsv(csv, filename) {
+  try {
+    const response = await fetch('/api/export/filtered', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv, filename }) });
+    await downloadFromResponse(response, filename);
+  } catch (error) {
+    downloadBlob(csv, 'text/csv;charset=utf-8;', filename);
+  }
 }
 
 buildFilters(data, () => { render(); });
@@ -288,6 +442,8 @@ $('exportMenu').addEventListener('click', event => {
   else if (action === 'raw') exportRawReport();
   else if (action === 'archive') openArchiveModal();
 });
+$('exportMostRiskyCsv').addEventListener('click', () => exportMostRisky(computeMostRiskyRows(filteredRecords), 'csv'));
+$('exportMostRiskyExcel').addEventListener('click', () => exportMostRisky(computeMostRiskyRows(filteredRecords), 'excel'));
 document.addEventListener('click', event => {
   if (!$('exportMenu').hidden && !event.target.closest('.export-dropdown')) $('exportMenu').hidden = true;
   if (!$('importMenu').hidden && !event.target.closest('.import-dropdown')) $('importMenu').hidden = true;

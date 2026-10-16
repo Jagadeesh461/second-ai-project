@@ -35,7 +35,7 @@ def make_record(**overrides):
         "Vulnerability Age": 30,
         "Days Open": 90,
         "Days Overdue": 60,
-        "SLA Breach": True,
+        "SLABreach": True,
         "Overdue": True,
         "FundamentalClassification": "Other",
         "Zone": "Internal",

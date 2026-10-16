@@ -140,6 +140,7 @@ function assistantExtractFilters(query, records) {
 // being part of the "Top 10 vulnerable AppSpaces" question's keywords).
 function assistantResolveIntent(text, fieldFilters) {
   const query = String(text || '').toLowerCase().trim();
+  if (/\bmost\s+risky\b|\briskiest\s+vulnerabilit/.test(query)) return 'most-risky';
   if (!query) return null;
   if (/\bhow many\b/.test(query) || /\btotal\b/.test(query) || /\bcount\b/.test(query)) return 'count';
   if (/\boldest\b/.test(query) && /\bopen\b/.test(query)) return 'oldest-open';
@@ -147,6 +148,43 @@ function assistantResolveIntent(text, fieldFilters) {
   if (/\bavs\b/.test(query) && /\bsummary\b/.test(query)) return 'avs-summary';
   if (/\bcompar/.test(query)) return 'comparison';
   return assistantMatchQuestion(assistantStripFieldFilterText(text, fieldFilters));
+}
+
+function assistantMostRiskyRecords(records) {
+  const unique = {};
+  records.forEach(record => {
+    if (!['4', '5'].includes(String(record['Severity Level'] || '')) ||
+        !['Essential', 'Fundamental'].includes(record.FundamentalClassification) ||
+        !assistantIsTrue(record.PatchAvailable) || !assistantIsTrue(record.SLABreach ?? record.SIABreach) ||
+        record.Zone !== 'External' || !assistantIsExploit(record) ||
+        !record['VULN COUNT'] || unique[record['VULN COUNT']]) return;
+    unique[record['VULN COUNT']] = record;
+  });
+  return Object.keys(unique).map(key => unique[key]);
+}
+
+function assistantIsTrue(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0 || value === null || value === undefined) return false;
+  const s = String(value).trim().toUpperCase();
+  return s === 'TRUE' || s === '1' || s === 'YES' || s === 'T' || s === 'Y';
+}
+
+function assistantMostRiskyAnswer(records) {
+  const risky = assistantMostRiskyRecords(records);
+  const apps = assistantTopEntries(assistantCountBy(risky, r => r.AppSpaceName), 10);
+  return {
+    id: 'most-risky',
+    title: 'Most Risky Vulnerabilities',
+    summary: `${assistantNumber(risky.length)} unique Most Risky Vulnerabilities match the current criteria.`,
+    stats: [
+      { label: 'Total', value: assistantNumber(risky.length) },
+      { label: 'Applications', value: assistantNumber(new Set(risky.map(r => r.AppSpaceName)).size) },
+      { label: 'Average age', value: `${risky.length ? Math.round(risky.reduce((sum, r) => sum + Number(r['Vulnerability Age'] || r['Days Open'] || 0), 0) / risky.length) : 0} days` },
+    ],
+    items: apps.map(([name, count]) => ({ label: name, value: `${assistantNumber(count)} findings` })),
+    notes: ['Criteria: severity 4/5, Essential/Fundamental, PatchAvailable, SLABreach, External and Exploit.'],
+  };
 }
 
 function assistantEscapeRegExp(value) {
@@ -242,7 +280,7 @@ function assistantEmptyAnswer(id, title) {
 
 function assistantSummaryAnswer(records) {
   const severity = assistantSeverityCounts(records);
-  const breached = records.filter(r => r['SLA Breach']).length;
+  const breached = records.filter(r => r.SLABreach).length;
   const overdue = records.filter(r => r.Overdue).length;
   const open = records.filter(r => r.Status === 'Open' || r.Status === 'In Progress').length;
   const resolved = records.filter(r => r.Status === 'Resolved' || r.Status === 'Closed').length;
@@ -287,8 +325,8 @@ function assistantCriticalAnswer(records) {
       notes: [],
     };
   }
-  const breached = criticals.filter(r => r['SLA Breach']).length;
-  const sorted = [...criticals].sort((a, b) => Number(b['SLA Breach']) - Number(a['SLA Breach']) || Number(b['Days Open'] || 0) - Number(a['Days Open'] || 0));
+  const breached = criticals.filter(r => r.SLABreach).length;
+  const sorted = [...criticals].sort((a, b) => Number(b.SLABreach) - Number(a.SLABreach) || Number(b['Days Open'] || 0) - Number(a['Days Open'] || 0));
   return {
     id: 'critical',
     title: 'Critical vulnerabilities',
@@ -302,7 +340,7 @@ function assistantCriticalAnswer(records) {
     items: sorted.slice(0, 5).map(record => ({
       label: `${record.ServerName} - ${record['Vulnerability Name']}`,
       value: `${assistantNumber(record['Days Open'])}d open`,
-      detail: `${record.AppSpaceName || 'Unknown AppSpace'} | ${record['SLA Breach'] ? `SLA breached by ${assistantNumber(record['Days Overdue'])}d` : `SLA due ${record['SLA Due Date'] || 'unknown'}`}`,
+      detail: `${record.AppSpaceName || 'Unknown AppSpace'} | ${record.SLABreach ? `SLA breached by ${assistantNumber(record['Days Overdue'])}d` : `SLA due ${record['SLA Due Date'] || 'unknown'}`}`,
     })),
     notes: ['Showing the 5 oldest breached Critical findings. Use the Critical table on the dashboard for the full list.'],
   };
@@ -322,7 +360,7 @@ function assistantTopAppSpacesAnswer(records) {
       return {
         label: `${String(index + 1).padStart(2, '0')}. ${name}`,
         value: `${assistantNumber(total)} findings`,
-        detail: `${assistantNumber(appRecords.filter(r => r.Severity === 'Critical').length)} Critical | ${assistantNumber(appRecords.filter(r => r.Severity === 'High').length)} High | ${assistantNumber(appRecords.filter(r => r['SLA Breach']).length)} breached`,
+        detail: `${assistantNumber(appRecords.filter(r => r.Severity === 'Critical').length)} Critical | ${assistantNumber(appRecords.filter(r => r.Severity === 'High').length)} High | ${assistantNumber(appRecords.filter(r => r.SLABreach).length)} breached`,
       };
     }),
     notes: [],
@@ -369,7 +407,7 @@ function assistantCountAnswer(records) {
     stats: [
       { label: 'Total', value: assistantNumber(records.length) },
       ...ASSISTANT_SEVERITIES.map(name => ({ label: name, value: assistantNumber(records.filter(r => r.Severity === name).length) })),
-      { label: 'SLA breached', value: assistantNumber(records.filter(r => r['SLA Breach']).length) },
+      { label: 'SLA breached', value: assistantNumber(records.filter(r => r.SLABreach).length) },
       { label: 'Exploitable', value: assistantNumber(records.filter(assistantIsExploit).length) },
       { label: 'Unique vuln instances', value: assistantNumber(new Set(records.map(r => r['VULN COUNT']).filter(Boolean)).size) },
     ],
@@ -392,7 +430,7 @@ function assistantTopTeamsAnswer(records) {
       return {
         label: `${String(index + 1).padStart(2, '0')}. ${name}`,
         value: `${assistantNumber(total)} findings`,
-        detail: `${assistantNumber(teamRecords.filter(r => r.Severity === 'Critical').length)} Critical | ${assistantNumber(teamRecords.filter(r => r['SLA Breach']).length)} breached`,
+        detail: `${assistantNumber(teamRecords.filter(r => r.Severity === 'Critical').length)} Critical | ${assistantNumber(teamRecords.filter(r => r.SLABreach).length)} breached`,
       };
     }),
     notes: [],
@@ -409,7 +447,7 @@ function assistantOldestOpenAnswer(records) {
     summary: `${assistantNumber(open.length)} open or in-progress findings in scope, oldest first.`,
     stats: [
       { label: 'Oldest', value: `${assistantNumber(sorted[0]['Days Open'])}d` },
-      { label: 'SLA breached', value: assistantNumber(open.filter(r => r['SLA Breach']).length) },
+      { label: 'SLA breached', value: assistantNumber(open.filter(r => r.SLABreach).length) },
     ],
     items: sorted.slice(0, 10).map(record => ({
       label: `${record.ServerName} - ${record['Vulnerability Name']}`,
@@ -460,7 +498,7 @@ function assistantComparisonAnswer(records) {
 }
 
 function assistantSlaAnswer(records) {
-  const breached = records.filter(r => r['SLA Breach']);
+  const breached = records.filter(r => r.SLABreach);
   if (!records.length) return assistantEmptyAnswer('sla-breach', 'SLA breach summary');
   const daysOverdue = breached.map(r => Number(r['Days Overdue'] || 0));
   const averageOverdue = daysOverdue.length ? Math.round(daysOverdue.reduce((total, days) => total + days, 0) / daysOverdue.length) : 0;
@@ -491,7 +529,7 @@ function assistantRemediationAnswer(records) {
     const group = groups[name];
     group.total += 1;
     if (record.Severity === 'Critical') group.critical += 1;
-    if (record['SLA Breach']) group.breached += 1;
+    if (record.SLABreach) group.breached += 1;
     group.servers.add(record.ServerName);
   });
   const ranked = Object.entries(groups)
@@ -563,6 +601,7 @@ const ASSISTANT_ANSWER_BUILDERS = {
   'oldest-open': assistantOldestOpenAnswer,
   'avs-summary': assistantAvsSummaryAnswer,
   'comparison': assistantComparisonAnswer,
+  'most-risky': assistantMostRiskyAnswer,
 };
 
 // Some intents already apply their own filtering as part of the answer they
