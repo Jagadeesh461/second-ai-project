@@ -332,7 +332,7 @@ class AvsDrilldownSourceFieldTests(unittest.TestCase):
                     "AppSpaceId": "AS-1", "AppSpaceName": "App", "AppSpaceTeam": "Team", "QID": "1",
                     "VulnerabilityName": "Java RCE", "Severity": "5", "AssetRiskScore": "50", "PCIRequired": "no",
                     "Category": "Java", "CVE": "CVE-2026-0001", "VendorReference": "KB-1",
-                    "FirstDetected": "2026-01-01", "LastDetected": "2026-03-31", "Resolved": "", "SIABreach": "no",
+                    "FirstDetected": "2026-01-01", "LastDetected": "2026-03-31", "Resolved": "", "SLABreach": "no",
                     "Status": "Open", "Solution": "Upgrade JDK",
                 })
                 row.update(updates)
@@ -368,7 +368,7 @@ class AvsDrilldownSourceFieldTests(unittest.TestCase):
     def test_cache_without_severity_level_is_stale(self):
         self.assertTrue(service._cache_is_stale({"records": [{"Severity": "Critical"}]}))
         self.assertTrue(service._cache_is_stale({"records": [{"Severity": "Critical", "Severity Level": "5"}]}))
-        fresh = {"Severity": "Critical", "Severity Level": "5", "FundamentalClassification": "Other", "Zone": "Internal", "RemitTeam": "Other", "Exploit": False, "Unique Vuln Name": "CVE-1", "VULN COUNT": "SRVAppCVE-1", "PatchAvailable": "FALSE", "SIABreach": False}
+        fresh = {"Severity": "Critical", "Severity Level": "5", "FundamentalClassification": "Other", "Zone": "Internal", "RemitTeam": "Other", "Exploit": False, "Unique Vuln Name": "CVE-1", "VULN COUNT": "SRVAppCVE-1", "PatchAvailable": "FALSE", "SLABreach": False}
         self.assertFalse(service._cache_is_stale({"records": [fresh]}))
         self.assertFalse(service._cache_is_stale({"records": []}))
 

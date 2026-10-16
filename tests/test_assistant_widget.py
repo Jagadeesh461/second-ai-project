@@ -15,7 +15,7 @@ RECORDS = [
         "AppSpaceTeam": "Payments Team", "QID": "QID-1", "Vulnerability Name": "OpenSSL Vulnerability",
         "Severity": "Critical", "CVE": "CVE-2026-0001", "Vendor": "Acme", "Status": "Open",
         "PCI Required": True, "SLA Due Date": "2026-01-10", "Vulnerability Age": 90,
-        "Days Open": 90, "Days Overdue": 60, "SLA Breach": True, "Overdue": True,
+        "Days Open": 90, "Days Overdue": 60, "SLABreach": True, "Overdue": True,
         "FundamentalClassification": "Other", "Zone": "Internal",
     },
     {
@@ -23,7 +23,7 @@ RECORDS = [
         "AppSpaceTeam": "Web Team", "QID": "QID-2", "Vulnerability Name": "Tomcat Vulnerability",
         "Severity": "High", "CVE": "CVE-2026-0002", "Vendor": "Acme", "Status": "In Progress",
         "PCI Required": False, "SLA Due Date": "2026-03-10", "Vulnerability Age": 20,
-        "Days Open": 20, "Days Overdue": 0, "SLA Breach": False, "Overdue": False,
+        "Days Open": 20, "Days Overdue": 0, "SLABreach": False, "Overdue": False,
         "FundamentalClassification": "Other", "Zone": "Internal",
     },
 ]

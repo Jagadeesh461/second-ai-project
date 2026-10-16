@@ -34,7 +34,7 @@ def make_record(**overrides):
         "Vulnerability Age": 90,
         "Days Open": 90,
         "Days Overdue": 60,
-        "SLA Breach": True,
+        "SLABreach": True,
         "Overdue": True,
         "FundamentalClassification": "Other",
         "Zone": "Internal",
@@ -55,7 +55,7 @@ def sample_records():
             CVE=f"CVE-2026-10{index}",
             Severity="Critical",
             Status="Open",
-            **{"SLA Breach": True, "Overdue": True, "PCI Required": True},
+            **{"SLABreach": True, "Overdue": True, "PCI Required": True},
         ))
     for index in range(3):
         records.append(make_record(
@@ -66,7 +66,7 @@ def sample_records():
             CVE=f"CVE-2026-20{index}",
             Severity="High",
             Status="In Progress",
-            **{"Vulnerability Name": "Apache Tomcat Vulnerability", "QID": "QID-2", "SLA Breach": False, "Overdue": False},
+            **{"Vulnerability Name": "Apache Tomcat Vulnerability", "QID": "QID-2", "SLABreach": False, "Overdue": False},
         ))
     records.append(make_record(
         ServerName="SRV-W9",
@@ -76,7 +76,7 @@ def sample_records():
         CVE="CVE-2026-2099",
         Severity="Low",
         Status="Resolved",
-        **{"SLA Breach": False, "Overdue": False},
+        **{"SLABreach": False, "Overdue": False},
     ))
     return records
 
@@ -111,7 +111,7 @@ def most_risky_records():
             "RemitTeam": "Change/ITO",
             "FundamentalClassification": "Essential",
             "PatchAvailable": "TRUE",
-            "SIABreach": "TRUE",
+            "SLABreach": "TRUE",
             "Zone": "External",
             "Exploit": "TRUE",
             "VULN COUNT": "SRV-1Customer PortalCVE-1",
@@ -174,6 +174,13 @@ class FilteredDataAnswerTests(unittest.TestCase):
         answer = ask("count most risky vulnerabilities", most_risky_records())
         self.assertEqual(answer["id"], "most-risky")
         self.assertIn("1 unique Most Risky Vulnerabilities", answer["summary"])
+        self.assertEqual(answer["stats"][0]["value"], "1")
+
+    def test_most_risky_handles_patch_available_as_numeric_one(self):
+        records = most_risky_records()
+        records[0]["PatchAvailable"] = "1"
+        answer = ask("show most risky vulnerabilities", records)
+        self.assertEqual(answer["id"], "most-risky")
         self.assertEqual(answer["stats"][0]["value"], "1")
 
     def test_summary_counts_come_from_the_supplied_records(self):

@@ -235,7 +235,7 @@ Responsibilities:
 - Resolves `Group` from the resolved `RemitTeam` value using the rule in `static/group_mapping.json` (`Change/ITO` -> `Suncorp Bank`; every other `RemitTeam` -> `Suncorp Group`).
 - Returns records plus metadata such as skipped duplicates, invalid dates, and original columns.
 
-The required standard input columns are `ServerName`, `OperatingSystem`, `Environment`, `AppSpaceId`, `AppSpaceName`, `AppSpaceTeam`, `QID`, `VulnerabilityName`, `Severity`, `AssetRiskScore`, `PCIRequired`, `Category`, `CVE`, `VendorReference`, `FirstDetected`, `LastDetected`, `Resolved`, `SIABreach`, and `Status`.
+The required standard input columns are `ServerName`, `OperatingSystem`, `Environment`, `AppSpaceId`, `AppSpaceName`, `AppSpaceTeam`, `QID`, `VulnerabilityName`, `Severity`, `AssetRiskScore`, `PCIRequired`, `Category`, `CVE`, `VendorReference`, `FirstDetected`, `LastDetected`, `Resolved`, `SLABreach`, and `Status`.
 
 The latest CSV remains in `data/`. Older CSV files in `data/` are moved to `archive/` after a successful import.
 

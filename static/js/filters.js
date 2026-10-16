@@ -15,7 +15,7 @@ const FILTER_FIELDS=[
   {key:'operating_system',label:'Operating System',field:'Operating System'},
   {key:'type_category',label:'Category',field:'Type Category'},
   {key:'pci_required',label:'PCI Required',value:record=>record['PCI Required']?'Yes':'No'},
-  {key:'sla_breach',label:'SLA Breach',value:record=>record['SLA Breach']?'Yes':'No'},
+  {key:'sla_breach',label:'SLA Breach',value:record=>record.SLABreach?'Yes':'No'},
   {key:'exploit',label:'Exploit',value:record=>(record.Exploit===true||String(record.Exploit).toUpperCase()==='TRUE')?'TRUE':'FALSE'},
   {key:'fundamental_classification',label:'Fundamental Classification',field:'FundamentalClassification',showInToolbar:false},
   {key:'zone',label:'Zone',field:'Zone',showInToolbar:false},

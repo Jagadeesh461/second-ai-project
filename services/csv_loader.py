@@ -20,24 +20,26 @@ STANDARD_COLUMNS = (
     "VulnerabilityName", "Severity", "AssetRiskScore", "QDS", "PCIRequired", "Type", "Category",
     "ThreatIntel", "PatchAvailable", "ThirdPartyComponent", "ThirdPartyComponentName", "Detection",
     "Solution", "CVE", "VendorReference", "ReleaseDate", "FirstDetected", "LastDetected", "Resolved",
-    "ResolutionInDays", "SIABreach", "CoveredInWintelCoreBaseline", "ScheduledDeployment", "LastPatchAttempt",
+    "ResolutionInDays", "SLABreach", "CoveredInWintelCoreBaseline", "ScheduledDeployment", "LastPatchAttempt",
     "Status", "PatchAvailableNewMetric", "LeaderName", "CVSS2Temporal", "CVSS3Temporal", "BaselinePublished",
 )
 REQUIRED_COLUMNS = (
     "ServerName", "OperatingSystem", "Environment", "AppSpaceId", "AppSpaceName", "AppSpaceTeam",
     "QID", "VulnerabilityName", "Severity", "AssetRiskScore", "PCIRequired", "Category", "CVE",
-    "VendorReference", "FirstDetected", "LastDetected", "Resolved", "SIABreach", "Status",
+    "VendorReference", "FirstDetected", "LastDetected", "Resolved", "SLABreach", "Status",
 )
 PROCESSED_COLUMNS = (
     "id", "ServerName", "Operating System", "Environment", "AssetType", "AppSpaceName", "AppSpaceId",
     "AppSpaceOwner", "AppSpaceTeam", "QID", "Vulnerability Name", "Severity", "CVSS Base Score",
     "AssetRiskScore", "QDS", "CVE", "Vendor", "VendorReference", "Type", "Category", "Type Category",
     "RemitTeam", "Group", "PCI Required", "Status", "First Detected", "Last Detected", "Resolution Date", "SLA Due Date",
-    "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "SLA Breach", "Overdue",
-    "Aging Bucket", "Detection", "Solution", "PatchAvailable", "SIABreach", "ThreatIntel", "ReleaseDate",
+    "Vulnerability Age", "Days Open", "Days Remaining", "Days Overdue", "Overdue",
+    "Aging Bucket", "Detection", "Solution", "PatchAvailable", "SLABreach", "ThreatIntel", "ReleaseDate",
     "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
     "AVSScore", "AVSLevel", "AVSUniqueVulnCount", "FundamentalClassification", "Zone",
     "Unique Vuln Name", "VULN COUNT", "Exploit",
+    "ITORresponsiblePartner", "ThirdPartyComponent", "ThirdPartyComponentName",
+    "CoveredInWintelCoreBaseline", "PatchAvailableNewMetric", "CVSS2Temporal", "CVSS3Temporal",
 )
 DATE_COLUMNS = {"ReleaseDate", "FirstDetected", "LastDetected", "Resolved", "LastPatchAttempt", "BaselinePublished"}
 SPREADSHEET_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -46,7 +48,10 @@ SPREADSHEET_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/mai
 def validate_required_columns(fieldnames: list[str] | None) -> None:
     if not fieldnames:
         raise ValueError("CSV has no header row")
-    missing = [column for column in REQUIRED_COLUMNS if column not in fieldnames]
+    normalized = list(fieldnames)
+    if "SIABreach" in normalized and "SLABreach" not in normalized:
+        normalized.append("SLABreach")
+    missing = [column for column in REQUIRED_COLUMNS if column not in normalized]
     if missing:
         raise ValueError(f"CSV is missing required standard columns: {', '.join(missing)}")
 
@@ -90,6 +95,11 @@ def _cell_text(cell: ET.Element, shared: list[str]) -> str:
     text = "" if value is None else value.text or ""
     if cell_type == "s" and text:
         return shared[int(text)].strip()
+    if cell_type == "b":
+        # Excel stores boolean (TRUE/FALSE) cells as 1/0 internally. Restore
+        # the TRUE/FALSE text the user actually sees/entered so values such
+        # as PatchAvailable and SLABreach are preserved exactly, not as 0/1.
+        return "TRUE" if text.strip() == "1" else "FALSE"
     return text.strip()
 
 
@@ -180,10 +190,11 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
             pci_required=bool(parse_bool(_value(cleaned, "PCIRequired"))),
             status=normalize_status(_value(cleaned, "Status")),
+            source_status=_value(cleaned, "Status"),
             first_detected=first,
             last_detected=last,
             resolution_date=resolution,
-            source_sla_breach=parse_bool(_value(cleaned, "SIABreach")),
+            source_sla_breach=parse_bool(_value(cleaned, "SLABreach") or _value(cleaned, "SIABreach")),
             warnings=warnings,
         )
         vulnerability.age_days = max((last - first).days, 0) if first and last else 0
@@ -225,7 +236,7 @@ def processed_row(record: Vulnerability) -> dict[str, object]:
         "Detection": _value(raw, "Detection"),
         "Solution": _value(raw, "Solution"),
         "PatchAvailable": _value(raw, "PatchAvailable"),
-        "SIABreach": "TRUE" if record.source_sla_breach else "FALSE",
+        "SLABreach": "TRUE" if record.source_sla_breach else "FALSE",
         "ThreatIntel": _value(raw, "ThreatIntel"),
         "Exploit": "TRUE" if record.exploit else "FALSE",
         "ReleaseDate": _value(raw, "ReleaseDate"),
@@ -236,6 +247,13 @@ def processed_row(record: Vulnerability) -> dict[str, object]:
         "BaselinePublished": _value(raw, "BaselinePublished"),
         "RemitTeam": record.remit_team,
         "Vulnerability Age": record.age_days,
+        "ITORresponsiblePartner": _value(raw, "ITORresponsiblePartner"),
+        "ThirdPartyComponent": _value(raw, "ThirdPartyComponent"),
+        "ThirdPartyComponentName": _value(raw, "ThirdPartyComponentName"),
+        "CoveredInWintelCoreBaseline": _value(raw, "CoveredInWintelCoreBaseline"),
+        "PatchAvailableNewMetric": _value(raw, "PatchAvailableNewMetric"),
+        "CVSS2Temporal": _value(raw, "CVSS2Temporal"),
+        "CVSS3Temporal": _value(raw, "CVSS3Temporal"),
     })
     return {column: row.get(column, "") for column in PROCESSED_COLUMNS}
 
