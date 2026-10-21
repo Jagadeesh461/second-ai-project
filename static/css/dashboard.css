@@ -1046,7 +1046,7 @@ th {
   padding: 11px 10px;
   border-bottom: 1px solid var(--line);
   color: #789096;
-  font: 800 10px "DM Mono", Consolas, monospace;
+  font: 800 11px "Segoe UI", Arial, sans-serif;
   letter-spacing: .5px;
   text-align: left;
   text-transform: uppercase;

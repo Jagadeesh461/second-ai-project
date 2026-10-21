@@ -236,7 +236,7 @@ function computeMostRiskyRows(records) {
 }
 
 function renderMostRiskyRow(r) {
-  return `<tr><td>${esc(r['VULN COUNT'])}</td><td>${esc(r.AppSpaceName)}</td><td>${esc(r['Type Category'] || r.Category || 'Unknown')}</td><td>${esc(r['Severity Level'] || r.Severity)}</td><td>${esc(r.RemitTeam)}</td><td>${isTrue(r.PatchAvailable) ? 'TRUE' : 'FALSE'}</td><td>${isTrue(r.SLABreach ?? r.SIABreach) ? 'TRUE' : 'FALSE'}</td><td>${isTrue(r.Exploit) ? 'TRUE' : 'FALSE'}</td><td>${r['Vulnerability Age'] || 0}d</td></tr>`;
+  return `<tr><td>${esc(r.AppSpaceId || 'N/A')}</td><td>${esc(r.AppSpaceName || 'N/A')}</td><td>${esc(r.ServerName || 'N/A')}</td><td>${esc(r['Vulnerability Name'] || 'N/A')}</td><td>${esc(r.CVE || 'N/A')}</td><td>${esc(r['First Detected'] || 'N/A')}</td><td>${r['Vulnerability Age'] || 0}d</td><td>${esc(r.RemitTeam || 'N/A')}</td><td>${esc(r.Solution || 'N/A')}</td></tr>`;
 }
 
 function renderMostRiskyCharts(records) {
