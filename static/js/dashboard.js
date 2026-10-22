@@ -461,8 +461,17 @@ $('tableSearch').addEventListener('input', () => { render(); });
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { renderCharts(filteredRecords); renderAvs(filteredRecords); }, 120);
+  resizeTimer = setTimeout(redrawCharts, 120);
 });
+
+// Canvases inside hidden tabs measure 0x0, so redraw charts from the
+// already-filtered in-memory records whenever a tab becomes visible.
+function redrawCharts() {
+  renderCharts(filteredRecords);
+  renderAvs(filteredRecords);
+  renderMostRiskyCharts(computeMostRiskyRows(filteredRecords));
+}
+initDashboardTabs({ onChange: () => requestAnimationFrame(redrawCharts) });
 
 $('reportStatus').textContent = window.LOAD_ERROR ? 'Report unavailable' : `${data.meta?.record_count || 0} findings loaded`;
 if (window.LOAD_ERROR) {

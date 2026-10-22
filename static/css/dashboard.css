@@ -1576,9 +1576,82 @@ footer {
   }
 }
 
+.dashboard-tabs {
+  display: flex;
+  gap: 6px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--panel-shadow);
+  scrollbar-width: thin;
+}
+
+.dashboard-tab {
+  flex: 1 0 auto;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: 800 12px Manrope, "Segoe UI", Arial, sans-serif;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.dashboard-tab:hover {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.dashboard-tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.dashboard-tab.is-active {
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(242, 102, 30, .28);
+}
+
+/* Home shows every section; other tabs show only sections tagged for them. */
+.dashboard-tab-panel[data-active-tab="overview"] .tab-section:not([data-tabs~="overview"]),
+.dashboard-tab-panel[data-active-tab="risky"] .tab-section:not([data-tabs~="risky"]),
+.dashboard-tab-panel[data-active-tab="avs"] .tab-section:not([data-tabs~="avs"]),
+.dashboard-tab-panel[data-active-tab="tables"] .tab-section:not([data-tabs~="tables"]) {
+  display: none;
+}
+
+.dashboard-tab-panel .tab-section {
+  animation: tab-fade-in .22s ease;
+}
+
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assistant-toggle {
     transition: none;
+  }
+
+  .dashboard-tab,
+  .dashboard-tab-panel .tab-section {
+    transition: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-tab {
+    flex: 0 0 auto;
+    padding: 9px 14px;
   }
 }
 
