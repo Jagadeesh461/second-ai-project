@@ -111,9 +111,14 @@ function assistantExtractEnumeratedFilters(query, avsLevel) {
     : null;
   const withoutAvsMention = avsMention ? lowerQuery.replace(avsMention, ' ') : lowerQuery;
   const filters = {};
+  const movement = withoutAvsMention.match(/\b(new|resolved|unchanged)\b/);
+  const movementQuery = /\b(weekly|movement|trend|last week|with status|movement status)\b/.test(withoutAvsMention);
+  if (movement && movementQuery) {
+    filters.new_resolved_status = [movement[1].charAt(0).toUpperCase() + movement[1].slice(1)];
+  }
   const severity = ASSISTANT_SEVERITIES.find(level => new RegExp(`\\b${level.toLowerCase()}\\b`).test(withoutAvsMention));
   if (severity) filters.severity = [severity];
-  const status = ASSISTANT_STATUSES.find(value => withoutAvsMention.includes(value.toLowerCase()));
+  const status = ASSISTANT_STATUSES.find(value => withoutAvsMention.includes(value.toLowerCase()) && !(movementQuery && value === 'Resolved'));
   if (status) filters.status = [status];
   if (/\bpci\b/.test(lowerQuery) && /\brequired\b|\bneeded\b/.test(lowerQuery)) filters.pci_required = ['Yes'];
   if (/\bexploit(s|able|ed)?\b/.test(lowerQuery)) filters.exploit = [/\b(non|not)[\s-]?exploit/.test(lowerQuery) ? 'FALSE' : 'TRUE'];
@@ -140,6 +145,10 @@ function assistantExtractFilters(query, records) {
 // being part of the "Top 10 vulnerable AppSpaces" question's keywords).
 function assistantResolveIntent(text, fieldFilters) {
   const query = String(text || '').toLowerCase().trim();
+  if (/\b(weekly vulnerability movement|weekly movement|last 7 weeks|last seven weeks|weekly improvement)\b/.test(query) ||
+      (/\btrend\b/.test(query) && /\b(new|resolved|unchanged)\b/.test(query)) ||
+      (/\blast week\b/.test(query) && /\bresolved\b/.test(query))) return 'weekly-movement';
+  if (/\bvulnerabilit/.test(query) && /\b(with status|movement status)\b/.test(query) && /\b(new|resolved|unchanged)\b/.test(query)) return 'movement-status';
   if (/\bmost\s+risky\b|\briskiest\s+vulnerabilit/.test(query)) return 'most-risky';
   if (!query) return null;
   if (/\bhow many\b/.test(query) || /\btotal\b/.test(query) || /\bcount\b/.test(query)) return 'count';
@@ -577,6 +586,49 @@ function assistantAvsExplanationAnswer(records) {
   };
 }
 
+function assistantWeeklyMovementAnswer(records, avsLevel, context) {
+  const history = context.trendHistory || [];
+  if (!history.length) return assistantEmptyAnswer('weekly-movement', 'Weekly vulnerability movement');
+  const latest = history[history.length - 1];
+  const previous = history.length > 1 ? history[history.length - 2] : null;
+  const net = Number(latest.resolved || 0) - Number(latest.new || 0);
+  return {
+    id: 'weekly-movement',
+    title: 'Weekly vulnerability movement',
+    summary: `For the week of ${latest.week}, ${assistantNumber(latest.new)} vulnerabilities were new, ${assistantNumber(latest.resolved)} were resolved and ${assistantNumber(latest.unchanged)} were unchanged.`,
+    stats: [
+      { label: 'New', value: assistantNumber(latest.new) },
+      { label: 'Resolved', value: assistantNumber(latest.resolved) },
+      { label: 'Unchanged', value: assistantNumber(latest.unchanged) },
+      { label: 'Net improvement', value: assistantNumber(net) },
+    ],
+    items: history.slice().reverse().map(item => ({
+      label: item.week,
+      value: `${assistantNumber(item.new)} new | ${assistantNumber(item.resolved)} resolved | ${assistantNumber(item.unchanged)} unchanged`,
+    })),
+    notes: [
+      net >= 0 ? `Resolved exceeded new vulnerabilities by ${assistantNumber(net)}.` : `New vulnerabilities exceeded resolved vulnerabilities by ${assistantNumber(Math.abs(net))}.`,
+      previous ? `Previous week resolved: ${assistantNumber(previous.resolved)}.` : 'This is the first recorded reporting week.',
+    ],
+  };
+}
+
+function assistantMovementStatusAnswer(records) {
+  const status = records[0]?.NewResolvedStatus || 'selected';
+  return {
+    id: 'movement-status',
+    title: `${status} vulnerabilities`,
+    summary: `${assistantNumber(records.length)} vulnerabilities match the requested weekly movement status.`,
+    stats: [{ label: status, value: assistantNumber(records.length) }],
+    items: records.slice(0, 10).map(record => ({
+      label: record['Vulnerability Name'] || record.QID || 'Unknown vulnerability',
+      value: record.ServerName || '',
+      detail: `${record.AppSpaceName || 'Unknown AppSpace'} | ${record.QID || 'Unknown QID'}`,
+    })),
+    notes: records.length > 10 ? [`Showing the first 10 of ${assistantNumber(records.length)} matching vulnerabilities.`] : [],
+  };
+}
+
 function assistantFallbackAnswer() {
   return {
     id: 'fallback',
@@ -602,6 +654,8 @@ const ASSISTANT_ANSWER_BUILDERS = {
   'avs-summary': assistantAvsSummaryAnswer,
   'comparison': assistantComparisonAnswer,
   'most-risky': assistantMostRiskyAnswer,
+  'weekly-movement': assistantWeeklyMovementAnswer,
+  'movement-status': assistantMovementStatusAnswer,
 };
 
 // Some intents already apply their own filtering as part of the answer they
@@ -649,11 +703,11 @@ function answerAssistantQuestion(question, context) {
 
   const builder = ASSISTANT_ANSWER_BUILDERS[matchedId];
   if (!builder) return { ...assistantFallbackAnswer(), scope: assistantScopeLabel(scope) };
-  if (!records.length && matchedId !== 'avs-explained') {
+  if (!records.length && !['avs-explained', 'weekly-movement'].includes(matchedId)) {
     const label = (ASSISTANT_QUESTIONS.find(item => item.id === matchedId) || {}).label || 'Answer';
     return { ...assistantEmptyAnswer(matchedId, label), scope: assistantScopeLabel(scope) };
   }
-  const answer = builder(records, avsLevel);
+  const answer = builder(records, avsLevel, scope);
   if (hasNlFilters) {
     const described = Object.entries(nlFilters).map(([key, values]) => {
       const definition = typeof filterDefinition === 'function' ? filterDefinition(key) : null;

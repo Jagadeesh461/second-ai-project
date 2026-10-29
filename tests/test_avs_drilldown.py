@@ -368,7 +368,7 @@ class AvsDrilldownSourceFieldTests(unittest.TestCase):
     def test_cache_without_severity_level_is_stale(self):
         self.assertTrue(service._cache_is_stale({"records": [{"Severity": "Critical"}]}))
         self.assertTrue(service._cache_is_stale({"records": [{"Severity": "Critical", "Severity Level": "5"}]}))
-        fresh = {"Severity": "Critical", "Severity Level": "5", "FundamentalClassification": "Other", "Zone": "Internal", "RemitTeam": "Other", "Exploit": False, "Unique Vuln Name": "CVE-1", "VULN COUNT": "SRVAppCVE-1", "PatchAvailable": "FALSE", "SLABreach": False}
+        fresh = {"Severity": "Critical", "Severity Level": "5", "FundamentalClassification": "Other", "Zone": "Internal", "RemitTeam": "Other", "Exploit": False, "Unique Vuln Name": "CVE-1", "VULN COUNT": "SRVAppCVE-1", "VulKey": "APP||App||SRV||PROD||1", "NewResolvedStatus": "New", "PatchAvailable": "FALSE", "SLABreach": False}
         self.assertFalse(service._cache_is_stale({"records": [fresh]}))
         self.assertFalse(service._cache_is_stale({"records": []}))
 

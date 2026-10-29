@@ -27,7 +27,7 @@ def get_dashboard_data():
 
 
 @app.get("/")
-@app.get("/<any(home, overview, risky, avs, tables):tab>")
+@app.get("/<any(overview, risky, movement, avs, tables):tab>")
 def dashboard(tab=None):
     data, error = get_dashboard_data()
     return render_template("dashboard.html", dashboard_json=json.dumps(data), load_error=error)

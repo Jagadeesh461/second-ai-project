@@ -199,7 +199,7 @@ class ImportWorkflowTests(unittest.TestCase):
         self.assertTrue(latest.exists())
         self.assertEqual(len(list(self.archive_dir.glob("input_*_older.csv"))), 1)
 
-    def test_reimport_archives_previous_output_and_does_not_merge_records(self):
+    def test_reimport_archives_previous_output_and_keeps_latest_resolved_records(self):
         self.write_standard_csv(self.data_dir / "first.csv", {"ServerName": "first-server"})
         first_result = service.process_latest_report(force=True)
         self.assertTrue(first_result["processed"])
@@ -217,13 +217,17 @@ class ImportWorkflowTests(unittest.TestCase):
         self.assertTrue(result["processed"])
         self.assertEqual(result["source"], "second.csv")
 
-        # The new output must be generated using ONLY the newly imported report.
+        # The new output contains the current report plus findings resolved
+        # by the latest comparison, but no resolved findings from older weeks.
         with service.PROCESSED_REPORT_PATH.open("r", encoding="utf-8", newline="") as handle:
             rows = list(csv.DictReader(handle))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["ServerName"], "second-server")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            {row["ServerName"]: row["NewResolvedStatus"] for row in rows},
+            {"second-server": "New", "first-server": "Resolved"},
+        )
         dashboard = json.loads(service.DASHBOARD_STATS_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(dashboard["meta"]["record_count"], 1)
+        self.assertEqual(dashboard["meta"]["record_count"], 2)
         self.assertEqual(dashboard["records"][0]["ServerName"], "second-server")
 
         # The previous input, processed output, and dashboard stats were archived
