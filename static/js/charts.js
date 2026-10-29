@@ -225,3 +225,65 @@ function pieSliceAt(geometry, x, y) {
   const slice = geometry.slices.find(s => angle >= s.start && angle < s.end);
   return slice ? slice.label : null;
 }
+
+function lineChart(canvas, rows, series, tooltip) {
+  const { ctx, w, h } = setupCanvas(canvas);
+  const left = 58;
+  const right = 24;
+  const top = 20;
+  const bottom = 48;
+  const chartW = Math.max(1, w - left - right);
+  const chartH = Math.max(1, h - top - bottom);
+  const maximum = Math.max(1, ...rows.flatMap(row => series.map(item => Number(row[item.key]) || 0)));
+  const xFor = index => left + (rows.length <= 1 ? chartW / 2 : index * chartW / (rows.length - 1));
+  const yFor = value => top + chartH - (Number(value) || 0) / maximum * chartH;
+
+  ctx.strokeStyle = '#dce4e5';
+  ctx.fillStyle = '#71808a';
+  ctx.font = '700 10px Manrope, Segoe UI, Arial';
+  ctx.textAlign = 'right';
+  for (let step = 0; step <= 4; step++) {
+    const value = maximum * step / 4;
+    const y = yFor(value);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(w - right, y);
+    ctx.stroke();
+    ctx.fillText(shortNumber(value), left - 8, y + 3);
+  }
+  rows.forEach((row, index) => {
+    ctx.fillStyle = '#71808a';
+    ctx.textAlign = 'center';
+    ctx.fillText(row.week, xFor(index), h - 18);
+  });
+  series.forEach(item => {
+    ctx.strokeStyle = item.color;
+    ctx.fillStyle = item.color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    rows.forEach((row, index) => {
+      const x = xFor(index);
+      const y = yFor(row[item.key]);
+      if (!index) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    rows.forEach((row, index) => {
+      ctx.beginPath();
+      ctx.arc(xFor(index), yFor(row[item.key]), 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+  const points = rows.map((row, index) => ({ x: xFor(index), row }));
+  canvas.onmousemove = event => {
+    if (!rows.length || !tooltip) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const point = points.reduce((best, candidate) => Math.abs(candidate.x - x) < Math.abs(best.x - x) ? candidate : best, points[0]);
+    tooltip.innerHTML = `<strong>Week: ${escapeHtml(point.row.week)}</strong><span>New: ${shortNumber(point.row.new)}</span><span>Resolved: ${shortNumber(point.row.resolved)}</span><span>Unchanged: ${shortNumber(point.row.unchanged)}</span>`;
+    tooltip.style.left = `${Math.min(rect.width - 150, Math.max(8, point.x + 10))}px`;
+    tooltip.style.top = `${Math.max(8, event.clientY - rect.top - 75)}px`;
+    tooltip.hidden = false;
+  };
+  canvas.onmouseleave = () => { if (tooltip) tooltip.hidden = true; };
+}

@@ -1619,12 +1619,135 @@ footer {
   box-shadow: 0 6px 16px rgba(242, 102, 30, .28);
 }
 
-/* Home shows every section; other tabs show only sections tagged for them. */
 .dashboard-tab-panel[data-active-tab="overview"] .tab-section:not([data-tabs~="overview"]),
 .dashboard-tab-panel[data-active-tab="risky"] .tab-section:not([data-tabs~="risky"]),
+.dashboard-tab-panel[data-active-tab="movement"] .tab-section:not([data-tabs~="movement"]),
 .dashboard-tab-panel[data-active-tab="avs"] .tab-section:not([data-tabs~="avs"]),
 .dashboard-tab-panel[data-active-tab="tables"] .tab-section:not([data-tabs~="tables"]) {
   display: none;
+}
+
+/* Weekly Vulnerability Movement: fixed-height chart boxes with absolutely
+   positioned canvases, so a canvas's pixel buffer can never feed back into
+   layout and the charts keep a stable size across redraws, filters and tabs. */
+.movement-trend-panel,
+.movement-pie-panel {
+  min-height: 0;
+}
+
+.movement-chart-box {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.movement-trend-box {
+  height: 360px;
+}
+
+.movement-pie-box {
+  height: 300px;
+}
+
+.chart-panel .movement-chart-box canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.movement-legend {
+  min-height: 24px;
+}
+
+.kpi-grid.movement-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  margin-bottom: var(--space-4);
+}
+
+.movement-kpi {
+  height: 100%;
+  font: inherit;
+  text-align: left;
+}
+
+.movement-chart-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: stretch;
+}
+
+.movement-table-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.movement-table-wrap {
+  flex: 1 1 auto;
+  max-height: 336px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid #e3ebeb;
+  border-radius: var(--radius-md);
+}
+
+.movement-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.movement-table th,
+.movement-table td {
+  width: 25%;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.movement-table th:first-child,
+.movement-table td:first-child {
+  text-align: left;
+}
+
+.movement-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f1f5f5;
+  color: #4f666c;
+  font-size: 11px;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.movement-table tbody tr:nth-child(even) {
+  background: #fafcfc;
+}
+
+.movement-table tbody tr:hover {
+  background: var(--brand-soft);
+}
+
+.movement-table-panel .pagination {
+  margin-top: var(--space-3);
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  min-width: 140px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(15, 27, 45, .94);
+  color: #fff;
+  font-size: 11px;
+  pointer-events: none;
+  box-shadow: var(--panel-shadow);
 }
 
 .dashboard-tab-panel .tab-section {
@@ -1696,7 +1819,8 @@ footer {
   .avs-drilldown-grid,
   .exposure-chart-grid,
   .hotspot-grid,
-  .insight-grid {
+  .insight-grid,
+  .movement-chart-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1806,11 +1930,25 @@ footer {
   .hotspot-panel {
     min-height: 280px;
   }
+
+  .movement-trend-box {
+    height: 300px;
+  }
+
+  .movement-pie-box {
+    height: 260px;
+  }
+
+  .movement-table th,
+  .movement-table td {
+    padding: 0 8px;
+  }
 }
 
 @media (max-width: 480px) {
   .filters,
   .kpi-grid,
+  .kpi-grid.movement-kpis,
   #avsKpis,
   #avsDrilldownKpis {
     grid-template-columns: 1fr;
@@ -1823,5 +1961,22 @@ footer {
 
   .bar-stats {
     text-align: left;
+  }
+
+  .movement-table th,
+  .movement-table td {
+    padding: 0 4px;
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .movement-table th:first-child,
+  .movement-table td:first-child {
+    width: 31%;
+  }
+
+  .movement-table th:not(:first-child),
+  .movement-table td:not(:first-child) {
+    width: 23%;
   }
 }

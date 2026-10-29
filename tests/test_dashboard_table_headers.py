@@ -28,3 +28,20 @@ class DashboardTableHeadersTests(unittest.TestCase):
             '<tbody id="mostRiskyTable"></tbody>',
             self.template,
         )
+
+    def test_weekly_movement_table_body_is_separate_from_its_column_headings(self):
+        # createDataTable replaces the innerHTML of the element it is given, so
+        # the id must sit on the <tbody>, never the <table>, or the headers vanish.
+        self.assertIn(
+            '<table class="movement-table"><thead><tr><th scope="col">Week</th><th scope="col">New</th>'
+            '<th scope="col">Resolved</th><th scope="col">Unchanged</th></tr></thead>'
+            '<tbody id="movementTable"></tbody>',
+            self.template,
+        )
+
+    def test_weekly_movement_charts_use_fixed_height_boxes(self):
+        css = (TEMPLATE_PATH.parents[1] / "static" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        self.assertIn('<div class="movement-chart-box movement-trend-box"><canvas id="movementTrendChart"', self.template)
+        self.assertIn('<div class="movement-chart-box movement-pie-box"><canvas id="movementPieChart"', self.template)
+        self.assertRegex(css, r"\.movement-trend-box \{\s*height: 360px;")
+        self.assertRegex(css, r"\.chart-panel \.movement-chart-box canvas \{\s*position: absolute;")

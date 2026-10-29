@@ -1,8 +1,8 @@
 // Client-side dashboard tabs. Sections are never duplicated or re-fetched:
 // every tab shows a subset of the same DOM (via data-tabs on .tab-section),
 // so filters, tables and in-memory data are shared across all tabs.
-var DASHBOARD_TABS = ['home', 'overview', 'risky', 'avs', 'tables'];
-var DEFAULT_DASHBOARD_TAB = 'home';
+var DASHBOARD_TABS = ['overview', 'risky', 'movement', 'avs', 'tables'];
+var DEFAULT_DASHBOARD_TAB = 'overview';
 
 function normalizeDashboardTab(value) {
   var key = String(value || '').replace(/^#/, '').replace(/^\/+/, '').replace(/^tab-/, '').trim().toLowerCase();

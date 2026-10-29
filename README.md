@@ -103,7 +103,8 @@ Browser JavaScript renders KPIs, charts, filters, tables, and export files
 6. The CSV loader reads each row, removes exact duplicates, and handles missing values.
 7. Each row becomes a `Vulnerability` object.
 8. Vulnerability age (`LastDetected` minus `FirstDetected`), SLA due dates, overdue status, and breach status are calculated from the record data and current date.
-9. The processed dataset is saved to `output/processed_vulnerabilities.csv`. Its `Severity` column holds the numeric 1-5 value from the input report (text labels in the input are converted: Critical 5, High 3, Medium 2, Low 1); the dashboard itself still shows the normalized Critical/High/Medium/Low labels.
+9. During import, the current report is compared with the previous processed report by `VulKey`. Current rows are classified as `New` or `Unchanged`; rows that existed in the previous active set but not the current report are appended as `Resolved`. Resolved rows from older comparisons are not carried forward.
+10. The processed dataset is saved to `output/processed_vulnerabilities.csv`. Its `Severity` column holds the numeric 1-5 value from the input report (text labels in the input are converted: Critical 5, High 3, Medium 2, Low 1); the dashboard itself still shows the normalized Critical/High/Medium/Low labels.
    The processed file also carries these derived columns (the same names are used by the dashboard, filters, charts, AVS, PDF report, CSV exports, API and AI assistant):
 
    | Column | Logic |
@@ -114,10 +115,13 @@ Browser JavaScript renders KPIs, charts, filters, tables, and export files
    | `Exploit` | `TRUE` when `ThreatIntel` mentions "Exploit" or "Active" (case-insensitive), otherwise `FALSE`. Negated phrases such as "No Known Exploit" count as `FALSE`. |
    | `Unique Vuln Name` | `COALESCE(CVE, VendorReference)`; `Unknown` only when both are blank. |
    | `VULN COUNT` | `ServerName + AppSpaceName + Unique Vuln Name` (plain concatenation), one identifier per Server/Application/Vulnerability combination. |
-10. The service calculates aggregate statistics once and saves them to `output/dashboard_stats.json`.
-11. The template embeds the cached JSON in the page.
-12. Browser JavaScript renders the dashboard. Dropdowns and search filter the loaded processed records in memory.
-13. The Export report button creates a CSV containing only the currently selected filters and search results.
+   | `VulKey` | `AppSpaceId || AppSpaceName || ServerName || Environment || QID`, used only for import-time weekly comparison. |
+   | `NewResolvedStatus` | `New`, `Resolved`, or `Unchanged` from the latest comparison. |
+11. The import appends or replaces the reporting-week entry in `static/trend_history.json` (the Monday of the report's latest `LastDetected` date, falling back to the import date) and retains the latest seven weeks. The Vulnerability Overview **New Vulnerabilities** and **Last Week Resolved Vulnerabilities** cards read the latest entry; when filters or search are active, New Vulnerabilities counts the in-scope records with `NewResolvedStatus = New`.
+12. The service calculates aggregate statistics once and saves them to `output/dashboard_stats.json`.
+13. The template embeds the cached JSON in the page.
+14. Browser JavaScript renders the dashboard. Dropdowns and search filter the loaded processed records in memory.
+15. The Export report button creates a CSV containing only the currently selected filters and search results.
 
 ## Folder Structure
 

@@ -11,7 +11,7 @@ from utils.calculation_utils import aging_bucket, calculate_sla, normalize_sever
 from utils.date_utils import parse_bool, parse_date, parse_number
 from utils.remit_team import resolve_remit_team
 from utils.group import resolve_group
-from utils.vuln_identity import is_exploit, unique_vuln_name, vuln_count_key
+from utils.vuln_identity import is_exploit, unique_vuln_name, vul_key, vuln_count_key
 
 
 STANDARD_COLUMNS = (
@@ -37,7 +37,7 @@ PROCESSED_COLUMNS = (
     "Aging Bucket", "Detection", "Solution", "PatchAvailable", "SLABreach", "ThreatIntel", "ReleaseDate",
     "ResolutionInDays", "ScheduledDeployment", "LastPatchAttempt", "LeaderName", "BaselinePublished",
     "AVSScore", "AVSLevel", "AVSUniqueVulnCount", "FundamentalClassification", "Zone",
-    "Unique Vuln Name", "VULN COUNT", "Exploit",
+    "Unique Vuln Name", "VULN COUNT", "VulKey", "NewResolvedStatus", "Exploit",
     "ITORresponsiblePartner", "ThirdPartyComponent", "ThirdPartyComponentName",
     "CoveredInWintelCoreBaseline", "PatchAvailableNewMetric", "CVSS2Temporal", "CVSS3Temporal",
 )
@@ -185,6 +185,13 @@ def load_vulnerabilities(csv_path: Path, today=None) -> tuple[list[Vulnerability
             exploit=is_exploit(threat_intel),
             unique_vuln_name=(unique_name := unique_vuln_name(_value(cleaned, "CVE"), _value(cleaned, "VendorReference"))),
             vuln_count=vuln_count_key(_value(cleaned, "ServerName") or "Unknown", _value(cleaned, "AppSpaceName") or "Unknown", unique_name),
+            vul_key=vul_key(
+                _value(cleaned, "AppSpaceId") or "Unknown",
+                _value(cleaned, "AppSpaceName") or "Unknown",
+                _value(cleaned, "ServerName") or "Unknown",
+                _value(cleaned, "Environment") or "Unknown",
+                _value(cleaned, "QID") or "Unknown",
+            ),
             remit_team=(remit_team := resolve_remit_team(_value(cleaned, "Detection"))),
             group=resolve_group(remit_team),
             type_category=_value(cleaned, "Category") or _value(cleaned, "Type") or "Unknown",
@@ -258,9 +265,15 @@ def processed_row(record: Vulnerability) -> dict[str, object]:
     return {column: row.get(column, "") for column in PROCESSED_COLUMNS}
 
 
-def write_processed_csv(records: list[Vulnerability], output_path: Path) -> None:
+def write_processed_csv(
+    records: list[Vulnerability],
+    output_path: Path,
+    resolved_rows: list[dict[str, object]] | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=PROCESSED_COLUMNS)
         writer.writeheader()
         writer.writerows(processed_row(record) for record in records)
+        for resolved in resolved_rows or []:
+            writer.writerow({column: resolved.get(column, "") for column in PROCESSED_COLUMNS})

@@ -20,7 +20,7 @@ function isExploit(record) {
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
 function buildFilteredCsv(records) {
-  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'Unique Vuln Name', 'VULN COUNT', 'ThreatIntel', 'Exploit', 'RemitTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLABreach', 'Overdue', 'Aging Bucket', 'FundamentalClassification', 'Zone'];
+  const columns = ['ServerName', 'Operating System', 'Environment', 'AppSpaceName', 'AppSpaceTeam', 'QID', 'Vulnerability Name', 'Severity', 'CVSS Base Score', 'AssetRiskScore', 'CVE', 'Vendor', 'Unique Vuln Name', 'VULN COUNT', 'VulKey', 'NewResolvedStatus', 'ThreatIntel', 'Exploit', 'RemitTeam', 'Group', 'Type Category', 'PCI Required', 'Status', 'First Detected', 'Last Detected', 'SLA Due Date', 'Vulnerability Age', 'Days Open', 'Days Remaining', 'Days Overdue', 'SLABreach', 'Overdue', 'Aging Bucket', 'FundamentalClassification', 'Zone'];
   const cellValue = (record, column) => (column === 'Exploit' ? (isExploit(record) ? 'TRUE' : 'FALSE') : record[column]);
   return [columns.map(csvCell).join(','), ...records.map(record => columns.map(column => csvCell(cellValue(record, column))).join(','))].join('\r\n');
 }
@@ -118,8 +118,25 @@ async function deleteArchiveFile(filename) {
   else alert('Failed to delete the archived file.');
 }
 
-function kpi(label, value, icon, tone = '') {
-  return `<article class="kpi ${tone}"><div class="kpi-label"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${(value || 0).toLocaleString()}</div></article>`;
+function kpi(label, value, icon, tone = '', hint = '') {
+  const title = hint ? ` title="${esc(hint)}"` : '';
+  return `<article class="kpi ${tone}"${title}><div class="kpi-label"><span>${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value">${(value || 0).toLocaleString()}</div></article>`;
+}
+
+function latestTrendEntry() {
+  const history = data.trend_history || [];
+  return history[history.length - 1] || {};
+}
+
+function scopeIsFiltered() {
+  return Object.values(getFilters()).some(values => values.length) || Boolean(($('tableSearch')?.value || '').trim());
+}
+
+// Unfiltered: the latest weekly comparison in trend_history.json. Filtered: the
+// same metric re-derived from the in-scope records' NewResolvedStatus.
+function newVulnerabilityCount(records) {
+  if (!scopeIsFiltered()) return Number(latestTrendEntry().new) || 0;
+  return records.filter(r => r.NewResolvedStatus === 'New').length;
 }
 
 function renderKpis(records) {
@@ -133,8 +150,8 @@ function renderKpis(records) {
     ['Low Vulnerabilities', count(r => r.Severity === 'Low'), '●', 'kpi-good'],
     ['Overdue Vulnerabilities', count(r => r.Overdue), '!', 'kpi-critical'],
     ['Critical Overdue', count(r => r.Overdue && r.Severity === 'Critical'), '!', 'kpi-critical'],
-    ['Open Vulnerabilities', count(r => r.Status === 'Open'), '○', 'kpi-warning'],
-    ['Resolved Vulnerabilities', count(r => r.Status === 'Resolved'), '✓', 'kpi-good'],
+    ['New Vulnerabilities', newVulnerabilityCount(records), '✚', 'kpi-warning', 'New vulnerabilities identified in the latest weekly comparison.'],
+    ['Last Week Resolved Vulnerabilities', latestTrendEntry().resolved || 0, '✓', 'kpi-good'],
     ['SLA Breached', count(r => r.SLABreach), '!', 'kpi-critical'],
     ['Assets Affected', new Set(records.map(r => r.ServerName)).size, '◇'],
     ['Unique Servers', new Set(records.map(r => r.ServerName)).size, '⌁'],
@@ -144,6 +161,65 @@ function renderKpis(records) {
     ['Unique Vuln Instances', new Set(records.map(r => r['VULN COUNT']).filter(Boolean)).size, '#'],
   ];
   $('kpis').innerHTML = values.map(x => kpi(...x)).join('');
+}
+
+const MOVEMENT_SERIES = [
+  { key: 'new', label: 'New', color: '#d43a2c' },
+  { key: 'resolved', label: 'Resolved', color: '#2f9d6c' },
+  { key: 'unchanged', label: 'Unchanged', color: '#de8324' },
+];
+
+function movementStatusSelection() {
+  return getFilters().new_resolved_status || [];
+}
+
+function selectMovementStatus(status) {
+  const select = document.querySelector('[data-filter="new_resolved_status"]');
+  if (!select) return;
+  select.value = select.value === status ? '' : status;
+  updateFilterOptions(data);
+  render();
+}
+
+function movementCard(item, value) {
+  const tone = item.key === 'new' ? 'kpi-critical' : item.key === 'resolved' ? 'kpi-good' : 'kpi-warning';
+  return `<button type="button" class="kpi kpi-clickable movement-kpi ${tone}" data-movement-status="${item.label}"><span class="kpi-label"><span>${item.label} Vulnerabilities</span><span class="kpi-icon">●</span></span><span class="kpi-value">${Number(value || 0).toLocaleString()}</span></button>`;
+}
+
+function renderWeeklyMovement() {
+  const history = data.trend_history || [];
+  const latest = history[history.length - 1] || { new: 0, resolved: 0, unchanged: 0 };
+  const selected = movementStatusSelection();
+  const visibleSeries = MOVEMENT_SERIES.filter(item => !selected.length || selected.includes(item.label));
+  lineChart($('movementTrendChart'), history, visibleSeries, $('movementTrendTooltip'));
+  $('movementTrendLegend').innerHTML = visibleSeries.map(item => `<span class="legend-item"><i class="legend-dot" style="background:${item.color}"></i>${item.label}</span>`).join('');
+  $('movementKpis').innerHTML = MOVEMENT_SERIES.map(item => movementCard(item, latest[item.key])).join('');
+  document.querySelectorAll('[data-movement-status]').forEach(button => {
+    button.addEventListener('click', () => selectMovementStatus(button.dataset.movementStatus));
+  });
+
+  const pieValues = Object.fromEntries(MOVEMENT_SERIES.map(item => [item.label, (!selected.length || selected.includes(item.label)) ? Number(latest[item.key] || 0) : 0]));
+  const total = Object.values(pieValues).reduce((sum, value) => sum + value, 0);
+  const colors = Object.fromEntries(MOVEMENT_SERIES.map(item => [item.label, item.color]));
+  const geometry = pie($('movementPieChart'), MOVEMENT_SERIES.map(item => ({
+    label: item.label,
+    value: pieValues[item.label],
+    text: assistantPercent(pieValues[item.label], total),
+  })), colors, null);
+  $('movementPieLegend').innerHTML = MOVEMENT_SERIES.map(item => `<span class="legend-item"><i class="legend-dot" style="background:${item.color}"></i>${item.label} ${pieValues[item.label].toLocaleString()} (${assistantPercent(pieValues[item.label], total)})</span>`).join('');
+  const pieCanvas = $('movementPieChart');
+  const pieTooltip = $('movementPieTooltip');
+  pieCanvas.onmousemove = event => {
+    const rect = pieCanvas.getBoundingClientRect();
+    const label = pieSliceAt(geometry, event.clientX - rect.left, event.clientY - rect.top);
+    if (!label) { pieTooltip.hidden = true; return; }
+    pieTooltip.innerHTML = `<strong>${esc(label)}</strong><span>Count: ${pieValues[label].toLocaleString()}</span><span>Percentage: ${assistantPercent(pieValues[label], total)}</span>`;
+    pieTooltip.style.left = `${Math.min(rect.width - 145, Math.max(8, event.clientX - rect.left + 10))}px`;
+    pieTooltip.style.top = `${Math.max(8, event.clientY - rect.top - 55)}px`;
+    pieTooltip.hidden = false;
+  };
+  pieCanvas.onmouseleave = () => { pieTooltip.hidden = true; };
+  movementTable.update(history.slice().reverse());
 }
 
 function renderCharts(records) {
@@ -380,6 +456,16 @@ const matrixTable = createDataTable({
   matches: (row, query) => `${row.name} ${row.team}`.toLowerCase().includes(query),
 });
 
+const movementTable = createDataTable({
+  tbodyId: 'movementTable', searchInputId: 'movementSearch',
+  previousButtonId: 'movementPreviousPage', nextButtonId: 'movementNextPage',
+  pageInfoId: 'movementPageInfo', countId: 'movementCount', defaultPageSize: 7,
+  colSpan: 4,
+  renderRow: row => `<tr><td><strong>${esc(row.week)}</strong></td><td>${Number(row.new || 0).toLocaleString()}</td><td>${Number(row.resolved || 0).toLocaleString()}</td><td>${Number(row.unchanged || 0).toLocaleString()}</td></tr>`,
+  emptyMessage: 'No weekly movement history is available',
+  matches: (row, query) => String(row.week || '').toLowerCase().includes(query),
+});
+
 function render() {
   filteredRecords = matchingRecords();
   renderKpis(filteredRecords);
@@ -390,6 +476,7 @@ function render() {
   const mostRisky = computeMostRiskyRows(filteredRecords);
   mostRiskyTable.update(mostRisky);
   renderMostRiskyCharts(mostRisky);
+  renderWeeklyMovement();
   renderMostRiskyDebug(filteredRecords);
   rankList('cveList', filteredRecords, 'CVE');
   rankList('qidList', filteredRecords, 'QID');
@@ -470,6 +557,7 @@ function redrawCharts() {
   renderCharts(filteredRecords);
   renderAvs(filteredRecords);
   renderMostRiskyCharts(computeMostRiskyRows(filteredRecords));
+  renderWeeklyMovement();
 }
 initDashboardTabs({ onChange: () => requestAnimationFrame(redrawCharts) });
 
@@ -491,5 +579,6 @@ initAssistant({
     filters: activeFilterSummary(),
     search: $('tableSearch')?.value || '',
     meta: data.meta || {},
+    trendHistory: data.trend_history || [],
   }),
 });

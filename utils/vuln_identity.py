@@ -1,4 +1,4 @@
-"""Derived vulnerability identity columns: Exploit, Unique Vuln Name, VULN COUNT."""
+"""Derived vulnerability identity columns used by processed reports."""
 
 import re
 
@@ -35,6 +35,17 @@ def unique_vuln_name(cve: str | None, vendor_reference: str | None) -> str:
 def vuln_count_key(server_name: str | None, app_space_name: str | None, unique_name: str | None) -> str:
     """VULN COUNT = ServerName + AppSpaceName + Unique Vuln Name."""
     return f"{server_name or ''}{app_space_name or ''}{unique_name or ''}"
+
+
+def vul_key(
+    app_space_id: str | None,
+    app_space_name: str | None,
+    server_name: str | None,
+    environment: str | None,
+    qid: str | None,
+) -> str:
+    """Stable weekly identity: AppSpaceId||AppSpaceName||ServerName||Environment||QID."""
+    return "||".join((app_space_id or "", app_space_name or "", server_name or "", environment or "", qid or ""))
 
 
 def record_unique_vuln_name(record) -> str:
