@@ -50,7 +50,12 @@ function computeAvsMetrics(records) {
         fundamentalClassification: r.FundamentalClassification || 'Other',
         zone: r.Zone || 'Internal',
         keys: new Set(),
+        scoreOverride: null,
       };
+    }
+    const override = Number(r.AVSScoreOverride);
+    if (r.AVSScoreOverride !== undefined && String(r.AVSScoreOverride).trim() !== '' && Number.isFinite(override)) {
+      byApp[appId].scoreOverride = override;
     }
     if (!avsQualifies(r)) return;
     const dedupKey = avsDedupKey(r);
@@ -61,7 +66,8 @@ function computeAvsMetrics(records) {
     const uniqueCount = info.keys.size;
     const zoneRating = AVS_ZONE_RATINGS[info.zone] ?? AVS_ZONE_RATINGS.Internal;
     const classificationRating = AVS_CLASSIFICATION_RATINGS[info.fundamentalClassification] ?? AVS_CLASSIFICATION_RATINGS.Other;
-    const score = uniqueCount * zoneRating * classificationRating;
+    const calculatedScore = uniqueCount * zoneRating * classificationRating;
+    const score = info.scoreOverride === null ? calculatedScore : info.scoreOverride;
     return { appId, name: info.name, team: info.team, owner: info.owner, fundamentalClassification: info.fundamentalClassification, zone: info.zone, uniqueCount, score, level: avsClassify(score) };
   });
 }

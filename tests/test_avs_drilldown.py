@@ -185,6 +185,16 @@ class AvsDrilldownCalculationTests(unittest.TestCase):
         self.assertEqual(apps[0]["score"], 2)  # Internal (1) x Other (1)
         self.assertEqual(apps[0]["level"], "Low")
 
+    def test_explicit_avs_score_override_is_used(self):
+        records = [rec(cve="CVE-1")]
+        records[0]["AVSScoreOverride"] = 501
+        apps = json.loads(run_js(
+            "JSON.stringify(computeAvsMetrics(CONTEXT.records));", files=CORE_FILES,
+            context={"records": records},
+        ))
+        self.assertEqual(apps[0]["score"], 501)
+        self.assertEqual(apps[0]["level"], "Medium")
+
 
 DOM_STUB = """
 function createStubElement(id) {

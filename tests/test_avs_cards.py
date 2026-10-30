@@ -90,6 +90,26 @@ class AvsCardFilterTests(unittest.TestCase):
         for level in ('Low', 'Medium', 'High'):
             self.assertIn(f'App-{level}', result)
 
+    def test_avs_update_orders_scored_apps_by_descending_score(self):
+        result = self._run(
+            "stubElements.avsWeeklyUpdate = createStubElement('avsWeeklyUpdate');"
+            "stubElements.avsWeeklyUpdateTable = createStubElement('avsWeeklyUpdateTable');"
+            "stubElements.avsWeeklyUpdateNotes = createStubElement('avsWeeklyUpdateNotes');"
+            "data = { avs_update: { rows: ["
+            "{ app_name: 'Lower score', avs: 501, status: 'New' },"
+            "{ app_name: 'Highest score', avs: 2910, status: 'High' },"
+            "{ app_name: 'Treated app', avs: 100, status: 'Improved/Treated' }"
+            "] } };"
+            "renderAvsWeeklyUpdate();"
+            "document.getElementById('avsWeeklyUpdateTable').innerHTML + document.getElementById('avsWeeklyUpdateNotes').innerHTML;"
+        )
+        self.assertLess(result.index('Highest score'), result.index('Lower score'))
+        self.assertLess(result.index('Lower score'), result.index('Improved/Treated Apps'))
+        self.assertIn('class="avs-update-row-new avs-update-row-med"', result)
+        self.assertIn('<tr class="avs-update-row-treated"><td colspan="2">Treated app</td></tr>', result)
+        self.assertIn('Treated app moved from Low to Treated', result)
+        self.assertIn('Lower score moved from Low to New', result)
+
     def test_high_card_filters_to_high_rows_only(self):
         result = self._run(
             "avsTable.update(CONTEXT.apps); avsSetActiveLevel('High');"

@@ -1,11 +1,5 @@
 [
   {
-    "week": "14-09-2026",
-    "new": 1500,
-    "resolved": 1000,
-    "unchanged": 19000
-  },
-  {
     "week": "21-09-2026",
     "new": 1200,
     "resolved": 1800,
@@ -40,5 +34,11 @@
     "new": 550,
     "resolved": 1900,
     "unchanged": 12250
+  },
+  {
+    "week": "07-09-2026",
+    "new": 0,
+    "resolved": 0,
+    "unchanged": 10961
   }
 ]

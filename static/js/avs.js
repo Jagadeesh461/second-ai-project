@@ -73,9 +73,127 @@ function renderAvs(records) {
   horizontalBars($('avsTeamChart'), teamEntries, '#f2661e');
 
   avsTable.update(apps);
+  renderAvsWeeklyUpdate();
   avsLastRecords = records;
   avsLastApps = apps;
   avsRefreshDrilldown(apps);
+}
+
+function renderAvsWeeklyUpdate() {
+  const grid = document.getElementById('avsUpdateGrid');
+  const section = document.getElementById('avsWeeklyUpdate');
+  const title = document.getElementById('avsWeeklyUpdateTitle');
+  const table = document.getElementById('avsWeeklyUpdateTable');
+  const notes = document.getElementById('avsWeeklyUpdateNotes');
+  const update = typeof data === 'undefined' ? {} : data.avs_update || {};
+  const rows = update.rows || [];
+  if (!section || !table) return;
+
+  section.hidden = !rows.length;
+  if (grid) grid.hidden = !rows.length;
+  if (!rows.length) return;
+  if (title) title.textContent = `AVS update for  ${update.week || 'Current Week'}`;
+  const improvedOrTreated = rows.filter(row => row.status === 'Improved/Treated');
+  const scoredRows = rows
+    .filter(row => row.status !== 'Improved/Treated')
+    .sort((left, right) => Number(right.avs || 0) - Number(left.avs || 0)
+      || String(left.app_name || '').localeCompare(String(right.app_name || '')));
+  const renderScoredRow = row => {
+    const statusClass = {
+      New: 'avs-update-row-new',
+      High: 'avs-update-row-high',
+      Med: 'avs-update-row-med',
+    }[row.status] || '';
+    const avs = Number(row.avs || 0);
+    const score = Number.isFinite(avs) ? avs.toFixed(1).replace(/\.0$/, '') : '0';
+    const scoreClass = avs > 1000 ? 'avs-update-row-high' : avs >= 500 ? 'avs-update-row-med' : '';
+    return `<tr class="${`${statusClass} ${scoreClass}`.trim()}"><td>${esc(row.app_name)}</td><td class="avs-update-score">${score}</td></tr>`;
+  };
+  const improvedRows = improvedOrTreated.length
+    ? `<tr class="avs-update-treated-heading"><td colspan="2">Improved/Treated Apps</td></tr>${improvedOrTreated.map(row => `<tr class="avs-update-row-treated"><td colspan="2">${esc(row.app_name)}</td></tr>`).join('')}`
+    : '';
+  table.innerHTML = `${scoredRows.map(renderScoredRow).join('')}${improvedRows}`;
+  if (notes) {
+    const transitions = rows.map(avsUpdateTransitionNote).filter(Boolean);
+    notes.hidden = !transitions.length;
+    notes.innerHTML = transitions.map(note => `<li>${note}</li>`).join('');
+  }
+  renderAvsWeeklyMovement(rows);
+}
+
+function avsUpdateLevel(score) {
+  const value = Number(score || 0);
+  return value > 1000 ? 'High' : value >= 500 ? 'Med' : 'Low';
+}
+
+function avsUpdateTransitionNote(row) {
+  const previousScore = Number(row.previous_avs || 0);
+  const currentScore = Number(row.avs || 0);
+  const previousLevel = avsUpdateLevel(previousScore);
+  const currentLevel = avsUpdateLevel(currentScore);
+  if (row.status === 'Improved/Treated') return `${esc(row.app_name)} moved from ${previousLevel} to Treated`;
+  if (row.status === 'New') return `${esc(row.app_name)} moved from ${previousLevel} to New`;
+  if (previousLevel !== currentLevel) return `${esc(row.app_name)} moved from ${previousLevel} to ${currentLevel}`;
+  return '';
+}
+
+function renderAvsWeeklyMovement(rows) {
+  const canvas = document.getElementById('avsWeeklyMovementChart');
+  const legend = document.getElementById('avsWeeklyMovementLegend');
+  if (legend) {
+    legend.innerHTML = '<span class="legend-item"><i class="legend-dot" style="background:#789096"></i>Previous AVS</span><span class="legend-item"><i class="legend-dot" style="background:#f2661e"></i>Current AVS</span>';
+  }
+  if (!canvas) return;
+  const entries = rows
+    .map(row => ({
+      name: row.app_name,
+      previous: Number(row.previous_avs || 0),
+      current: Number(row.avs || 0),
+    }))
+    .filter(row => Number.isFinite(row.previous) && Number.isFinite(row.current))
+    .sort((left, right) => Math.abs(right.current - right.previous) - Math.abs(left.current - left.previous))
+    .slice(0, 7);
+  const { ctx, w, h } = setupCanvas(canvas);
+  const left = 28;
+  const right = 12;
+  const top = 40;
+  const bottom = 38;
+  const chartWidth = Math.max(1, w - left - right);
+  const chartHeight = Math.max(1, h - top - bottom);
+  const groupWidth = chartWidth / Math.max(entries.length, 1);
+  const barWidth = Math.max(6, Math.min(20, groupWidth * .28));
+  const maximum = Math.max(...entries.flatMap(row => [row.previous, row.current]), 1);
+
+  ctx.strokeStyle = '#dce4e5';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+  ctx.lineTo(left, h - bottom);
+  ctx.lineTo(w - right, h - bottom);
+  ctx.stroke();
+
+  ctx.font = '700 10px Manrope, Segoe UI, Arial';
+  entries.forEach((entry, index) => {
+    const center = left + index * groupWidth + groupWidth / 2;
+    const bars = [
+      { color: '#789096', value: entry.previous, x: center - barWidth - 2, labelOffset: 4 },
+      { color: '#f2661e', value: entry.current, x: center + 2, labelOffset: 16 },
+    ];
+    bars.forEach(bar => {
+      const barHeight = bar.value / maximum * chartHeight;
+      const y = h - bottom - barHeight;
+      ctx.fillStyle = bar.color;
+      ctx.fillRect(bar.x, y, barWidth, barHeight);
+      if (bar.value > 1) {
+        ctx.fillStyle = '#52656b';
+        ctx.textAlign = 'center';
+        ctx.fillText(shortNumber(bar.value), bar.x + barWidth / 2, Math.max(top - bar.labelOffset + 2, y - bar.labelOffset));
+      }
+    });
+    ctx.fillStyle = '#71808a';
+    ctx.textAlign = 'center';
+    ctx.fillText(ellipsize(ctx, entry.name, groupWidth - 8), center, h - 10);
+  });
 }
 
 function renderAvsRow(a) {
