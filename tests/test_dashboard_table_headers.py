@@ -39,6 +39,41 @@ class DashboardTableHeadersTests(unittest.TestCase):
             self.template,
         )
 
+    def test_avs_update_table_has_reference_column_headings(self):
+        self.assertIn('<div id="avsUpdateGrid" class="avs-update-grid" hidden>', self.template)
+        self.assertIn('<section id="avsWeeklyUpdate" class="panel avs-weekly-update">', self.template)
+        self.assertIn('<canvas id="avsWeeklyMovementChart"></canvas>', self.template)
+        self.assertIn('<div id="avsWeeklyMovementLegend" class="legend avs-movement-legend"></div>', self.template)
+        self.assertIn('<ul id="avsWeeklyUpdateNotes" class="avs-update-notes" hidden></ul>', self.template)
+        self.assertIn(
+            '<table class="avs-update-table"><thead><tr><th scope="col">APP NAME</th>'
+            '<th scope="col">AVS</th></tr></thead><tbody id="avsWeeklyUpdateTable"></tbody></table>',
+            self.template,
+        )
+        self.assertIn(
+            '<h2 id="avsWeeklyUpdateTitle"></h2><div class="avs-update-legend"'
+            ' aria-label="AVS update status legend"><span class="avs-update-label avs-update-treated">'
+            'Improved/Treated</span><span class="avs-update-label avs-update-new">New</span>'
+            '<span class="avs-update-label avs-update-high">High</span>'
+            '<span class="avs-update-label avs-update-med">Med</span>',
+            self.template,
+        )
+
+    def test_avs_update_status_colours_apply_to_requested_cells(self):
+        css = (TEMPLATE_PATH.parents[1] / "static" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        self.assertIn(".avs-update-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn(".avs-update-table th {\n  background: #d8e5e5;\n  border: 1px solid #6f8f8f;", css)
+        self.assertIn(".avs-update-table td {\n  border: 1px solid #6f8f8f;\n  color: #17343a;", css)
+        self.assertNotIn(".avs-update-row-treated td { background:", css)
+        self.assertIn(".avs-update-treated-heading td {\n  background: #4ccfd0;", css)
+        self.assertIn(".avs-update-row-new td:first-child { background: #f5a623; }", css)
+        self.assertIn(".avs-update-row-high .avs-update-score { background: #ebc1cc; }", css)
+        self.assertIn(".avs-update-row-med .avs-update-score { background: #e9d28f; }", css)
+        self.assertIn(".avs-update-table .avs-update-row-treated td {\n  width: auto;\n  text-align: left;", css)
+        self.assertIn(".avs-update-table .avs-update-treated-heading td {\n  width: auto;\n  text-align: center;", css)
+        self.assertIn(".avs-update-table td:first-child {\n  font-weight: 700;", css)
+        self.assertIn(".avs-update-notes {\n  margin: var(--space-3) 0 0;\n  padding: var(--space-3) 0 0 20px;", css)
+
     def test_weekly_movement_charts_use_fixed_height_boxes(self):
         css = (TEMPLATE_PATH.parents[1] / "static" / "css" / "dashboard.css").read_text(encoding="utf-8")
         self.assertIn('<div class="movement-chart-box movement-trend-box"><canvas id="movementTrendChart"', self.template)

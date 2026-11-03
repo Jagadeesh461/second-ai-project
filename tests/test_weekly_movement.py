@@ -35,6 +35,78 @@ class WeeklyMovementImportTests(unittest.TestCase):
         self.paths.start()
         self.addCleanup(self.paths.stop)
 
+    def test_avs_update_marks_score_reduction_as_improved_or_treated(self):
+        previous = {
+            "applications": [{
+                "AppSpaceId": "AS-00010",
+                "AppSpaceName": "Document Management",
+                "AVSScore": 501,
+                "AVSLevel": "Medium",
+            }],
+        }
+        current = {
+            "applications": [{
+                "AppSpaceId": "AS-00010",
+                "AppSpaceName": "Document Management",
+                "AVSScore": 1,
+                "AVSLevel": "Low",
+            }],
+        }
+
+        update = service._build_avs_update(current, previous, date(2026, 10, 29))
+
+        self.assertEqual(update["rows"], [{
+            "app_name": "Document Management",
+            "avs": 1,
+            "previous_avs": 501.0,
+            "score_change": -500.0,
+            "status": "Improved/Treated",
+        }])
+
+    def test_avs_update_marks_score_increase_as_new(self):
+        current = {
+            "applications": [
+                {
+                    "AppSpaceId": "AS-00011",
+                    "AppSpaceName": "High scoring new app",
+                    "AVSScore": 501,
+                    "AVSLevel": "Medium",
+                },
+                {
+                    "AppSpaceId": "AS-00012",
+                    "AppSpaceName": "Low scoring new app",
+                    "AVSScore": 499,
+                    "AVSLevel": "Low",
+                },
+            ],
+        }
+        previous = {
+            "applications": [
+                {
+                    "AppSpaceId": "AS-00011",
+                    "AppSpaceName": "High scoring new app",
+                    "AVSScore": 499,
+                    "AVSLevel": "Low",
+                },
+                {
+                    "AppSpaceId": "AS-00012",
+                    "AppSpaceName": "Low scoring new app",
+                    "AVSScore": 100,
+                    "AVSLevel": "Low",
+                },
+            ],
+        }
+
+        update = service._build_avs_update(current, previous, date(2026, 10, 29))
+
+        self.assertEqual(update["rows"], [{
+            "app_name": "High scoring new app",
+            "avs": 501,
+            "previous_avs": 499.0,
+            "score_change": 2.0,
+            "status": "New",
+        }])
+
     def write_report(self, name, findings):
         path = self.data / name
         with path.open("w", encoding="utf-8", newline="") as handle:
