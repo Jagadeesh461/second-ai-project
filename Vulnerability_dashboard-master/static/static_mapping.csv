@@ -1,0 +1,11 @@
+AppSpaceId,AppSpaceName,AppSpaceTeam,FundamentalClassification,Zone
+AS-00001,Customer Portal,Digital Platforms,Essential,External
+AS-00002,Claims Processing,Claims Technology,Other,Internal
+AS-00003,Payment Gateway Hub,Payments Engineering,Essential,External
+AS-00004,Identity Service,Identity and Access,Other,Internal
+AS-00005,Data Warehouse,Data Services,Other,Internal
+AS-00006,Mobile Banking,Mobile Engineering,Other,Internal
+AS-00007,HR Self Service,Corporate IT,Other,Internal
+AS-00008,Supply Chain Hub,Supply Chain Technology,Other,Internal
+AS-00009,Analytics API,Integration Services,Other,Internal
+AS-00010,Document Management,Enterprise Applications,Other,Internal
